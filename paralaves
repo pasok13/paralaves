@@ -1,0 +1,1627 @@
+
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f0;color:#1a1a1a;min-height:100vh;padding:1rem}
+.wrap{max-width:860px;margin:0 auto}
+h1{font-size:18px;font-weight:500;margin-bottom:1.25rem;color:#1a1a1a}
+.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1.5rem}
+.stat{background:#fff;border:0.5px solid #e0e0d8;border-radius:8px;padding:10px 14px}
+.stat-label{font-size:11px;color:#888;margin-bottom:2px}
+.stat-val{font-size:20px;font-weight:500;color:#1a1a1a}
+.scan-area{background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem}
+.scan-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.scan-input{font-size:15px;padding:8px 12px;border:0.5px solid #ccc;border-radius:8px;width:100%;background:#fff;color:#1a1a1a}
+.scan-input:focus{outline:none;border-color:#999;box-shadow:0 0 0 2px rgba(0,0,0,0.07)}
+.btn{padding:8px 16px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;cursor:pointer;font-size:14px;white-space:nowrap}
+.btn:hover{background:#f5f5f0}
+.btn-import{background:#e8f0fe;border-color:#b0c4f5;color:#1a56db;font-weight:500}
+.btn-import:hover{opacity:0.85;background:#dce8fd}
+.hint{font-size:12px;color:#888;margin-top:6px}
+.preview-box{margin-top:10px;padding:10px 12px;border-radius:8px;border:0.5px solid #b0c4f5;background:#e8f0fe;display:none}
+.preview-box.err{border-color:#f5b0b0;background:#fee8e8}
+.preview-sku{font-size:14px;font-weight:500;color:#1a1a1a}
+.preview-name{font-size:12px;color:#555;margin-top:1px}
+.preview-detail{font-size:12px;color:#555;margin-top:3px;font-family:monospace}
+.group-card{background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;margin-bottom:1rem;overflow:hidden}
+.group-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fafaf7;border-bottom:0.5px solid #e0e0d8;cursor:pointer;user-select:none}
+.group-left{display:flex;flex-direction:column;gap:2px}
+.group-title{font-size:14px;font-weight:500;color:#1a1a1a}
+.group-title:hover{color:#1a56db;text-decoration:underline dotted}
+.group-name{font-size:11px;color:#888}
+.group-meta{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.badge{font-size:11px;padding:2px 8px;border-radius:100px;background:#e8f0fe;color:#1a56db;font-weight:500}
+.badge-total{background:#e6f4ea;color:#1e7e34}
+.badge-new{background:#e6f4ea;color:#1e7e34;font-size:10px;padding:1px 6px;border-radius:100px;font-weight:500;margin-left:4px}
+.chevron{font-size:12px;color:#888;transition:transform 0.2s;display:inline-block}
+.chevron.open{transform:rotate(180deg)}
+.group-notes{font-size:12px;padding:4px 8px;border:0.5px solid #ddd;border-radius:6px;background:#fafaf7;color:#555;width:220px;outline:none;transition:border-color 0.15s,box-shadow 0.15s;font-family:inherit}
+.group-notes:focus{border-color:#999;box-shadow:0 0 0 2px rgba(0,0,0,0.07);background:#fff}
+.group-notes::placeholder{color:#bbb}
+.group-price-badge{font-size:12px;font-weight:600;color:#1e7e34;background:#e6f4ea;border:0.5px solid #a8d5b5;border-radius:6px;padding:4px 9px;white-space:nowrap;user-select:none}
+.size-table{width:100%;border-collapse:collapse}
+.size-table th{font-size:11px;color:#888;font-weight:500;padding:6px 14px;text-align:left;border-bottom:0.5px solid #e0e0d8}
+.size-table th:last-child,.size-table td:last-child{text-align:right}
+.size-table td{font-size:13px;padding:7px 14px;color:#1a1a1a;border-bottom:0.5px solid #e0e0d8}
+.size-table tr:last-child td{border-bottom:none}
+.size-table tr:hover td{background:#fafaf7}
+.qty-cell{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.qty-btn{width:22px;height:22px;border:0.5px solid #ccc;border-radius:4px;background:transparent;cursor:pointer;font-size:14px;line-height:1;color:#555;display:flex;align-items:center;justify-content:center}
+.qty-btn:hover{background:#f5f5f0;color:#1a1a1a}
+.qty-val{min-width:24px;text-align:center;font-weight:500;font-size:14px}
+.empty{text-align:center;padding:2.5rem;color:#888;font-size:14px}
+.actions-row{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.save-indicator{font-size:11px;color:#1e7e34;margin-left:auto;padding:4px 10px;background:#e6f4ea;border-radius:100px;display:none}
+.save-indicator.show{display:inline-block}
+/* Tabs */
+.tabs{display:flex;gap:0;margin-bottom:1.5rem;border-bottom:1.5px solid #e0e0d8}
+.tab-btn{padding:8px 18px;font-size:13px;font-weight:500;color:#888;background:none;border:none;border-bottom:2.5px solid transparent;cursor:pointer;margin-bottom:-1.5px;transition:color 0.15s,border-color 0.15s}
+.tab-btn.active{color:#1a1a1a;border-bottom-color:#1a1a1a}
+.tab-btn:hover:not(.active){color:#555}
+.tab-panel{display:none}.tab-panel.active{display:block}
+/* Receipt title */
+.receipt-title-row{display:flex;align-items:center;gap:10px;margin-bottom:1rem;background:#fff;border:0.5px solid #e0e0d8;border-radius:12px;padding:10px 14px}
+.receipt-title-label{font-size:12px;color:#888;white-space:nowrap;font-weight:500}
+.receipt-title-input{flex:1;font-size:15px;font-weight:500;padding:6px 10px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;outline:none}
+.receipt-title-input:focus{border-color:#999;box-shadow:0 0 0 2px rgba(0,0,0,0.07)}
+.receipt-title-input::placeholder{color:#bbb;font-weight:400}
+/* Save receipt modal */
+.save-receipt-fields{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.save-receipt-fields label{font-size:12px;color:#888;margin-bottom:2px;display:block}
+.save-receipt-fields input{font-size:14px;padding:7px 10px;border:0.5px solid #ccc;border-radius:8px;width:100%;background:#fff;color:#1a1a1a;outline:none}
+.save-receipt-fields input:focus{border-color:#999;box-shadow:0 0 0 2px rgba(0,0,0,0.07)}
+/* Saved receipts list */
+.saved-list{display:flex;flex-direction:column;gap:8px}
+.saved-item{background:#fff;border:0.5px solid #e0e0d8;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:box-shadow 0.15s}
+.saved-item:hover{box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.saved-item-info{flex:1;min-width:0}
+.saved-item-title{font-size:14px;font-weight:500;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saved-item-meta{font-size:11px;color:#888;margin-top:2px}
+.saved-item-actions{display:flex;gap:6px;flex-shrink:0}
+.saved-empty{text-align:center;padding:2.5rem;color:#888;font-size:14px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:#fff;border:0.5px solid #6dbf85;border-radius:8px;padding:8px 18px;font-size:13px;transition:transform 0.25s;z-index:999;pointer-events:none;color:#1e7e34;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.toast.err{border-color:#f5b0b0;color:#c0392b}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.mono{font-family:monospace;font-size:12px;color:#555}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal-box{background:#fff;border:0.5px solid #ccc;border-radius:12px;padding:1.25rem;width:90%;max-width:560px;max-height:85vh;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:500;margin-bottom:8px;color:#1a1a1a}
+.csv-area{width:100%;font-family:monospace;font-size:11px;padding:10px;border:0.5px solid #ccc;border-radius:8px;background:#fafaf7;color:#1a1a1a;height:200px;resize:none}
+.modal-hint{font-size:11px;color:#888;margin-top:6px;margin-bottom:10px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.import-drop{border:1.5px dashed #ccc;border-radius:12px;padding:1.5rem;text-align:center;cursor:pointer;margin-bottom:12px;transition:background 0.15s}
+.import-drop:hover,.import-drop.drag{background:#e8f0fe;border-color:#b0c4f5}
+.import-drop-label{font-size:13px;color:#555;margin-top:6px}
+.import-drop-sub{font-size:11px;color:#888;margin-top:4px}
+.import-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.col-select-wrap{display:flex;flex-direction:column;gap:4px}
+.col-label{font-size:11px;color:#888}
+.col-select{font-size:13px;padding:6px 8px;border:0.5px solid #ccc;border-radius:8px;background:#fff;color:#1a1a1a;width:100%}
+.import-preview-table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}
+.import-preview-table th{font-size:11px;color:#888;font-weight:500;padding:5px 8px;text-align:left;border-bottom:0.5px solid #e0e0d8}
+.import-preview-table td{padding:5px 8px;border-bottom:0.5px solid #e0e0d8;color:#1a1a1a}
+.import-preview-table td.ok{color:#1e7e34}
+.import-preview-table td.miss{color:#c0392b}
+.import-preview-table tr:last-child td{border-bottom:none}
+.step-indicator{font-size:11px;color:#888;margin-bottom:12px}
+@media(max-width:600px){
+  .summary-bar{grid-template-columns:repeat(2,1fr)}
+  .import-cols{grid-template-columns:1fr}
+}
+/* Photo feature */
+.photo-btn{width:22px;height:22px;border:0.5px solid #ccc;border-radius:4px;background:transparent;cursor:pointer;font-size:12px;line-height:1;color:#888;display:inline-flex;align-items:center;justify-content:center;padding:0;flex-shrink:0}
+.photo-btn:hover{background:#f5f5f0;color:#1a1a1a}
+.photo-btn.has-photo{border-color:#b0c4f5;background:#e8f0fe;color:#1a56db}
+.photo-panel{padding:10px 14px;border-top:0.5px solid #e0e0d8;background:#fafaf7;display:flex;align-items:flex-start;gap:10px}
+.photo-thumb{width:140px;height:140px;object-fit:cover;border-radius:6px;border:0.5px solid #e0e0d8;cursor:pointer;flex-shrink:0}
+.photo-thumb-empty{width:72px;height:72px;border:1.5px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;flex-shrink:0;background:#fff;color:#ccc}
+.photo-thumb-empty:hover{border-color:#999;color:#999}
+.photo-info{font-size:11px;color:#888;display:flex;flex-direction:column;gap:6px;justify-content:center}
+.photo-remove{font-size:11px;color:#c0392b;cursor:pointer;background:none;border:none;padding:0;text-decoration:underline;cursor:pointer}
+.photo-toggle-wrap{display:flex;align-items:center;gap:6px;margin-left:auto}
+.photo-toggle-label{font-size:11px;color:#888}
+.photo-toggle{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0}
+.photo-toggle input{opacity:0;width:0;height:0}
+.photo-toggle-slider{position:absolute;inset:0;background:#ccc;border-radius:18px;cursor:pointer;transition:background 0.2s}
+.photo-toggle-slider:before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform 0.2s}
+.photo-toggle input:checked+.photo-toggle-slider{background:#1a56db}
+.photo-toggle input:checked+.photo-toggle-slider:before{transform:translateX(14px)}
+/* Manage catalog */
+.catalog-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid #eee}
+.catalog-item:last-child{border-bottom:none}
+.catalog-item-info{flex:1;min-width:0}
+.catalog-item-sku{font-size:13px;font-weight:500;color:#1a1a1a}
+.catalog-item-meta{font-size:11px;color:#888;margin-top:1px}
+/* Photo lightbox */
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:999;align-items:center;justify-content:center}
+.lightbox.open{display:flex}
+.lightbox img{max-width:90vw;max-height:85vh;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.lightbox-close{position:fixed;top:16px;right:20px;font-size:28px;color:#fff;cursor:pointer;line-height:1;opacity:0.8}
+.lightbox-close:hover{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Inventory Scanner</h1>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('scan')">📦 Σκανάρισμα</button>
+    <button class="tab-btn" onclick="switchTab('saved')" id="saved-tab-btn">📂 Αποθηκευμένες Παραλαβές</button>
+  </div>
+
+  <!-- SCAN TAB -->
+  <div class="tab-panel active" id="tab-scan">
+  <div class="receipt-title-row">
+    <span class="receipt-title-label">Τίτλος παραλαβής:</span>
+    <input class="receipt-title-input" id="receipt-title" placeholder="π.χ. Παραλαβή Fila Μάρτιος 2026…" autocomplete="off">
+  </div>
+  <div class="summary-bar">
+    <div class="stat"><div class="stat-label">Catalog barcodes</div><div class="stat-val" id="s-catalog">445</div></div>
+    <div class="stat"><div class="stat-label">SKU σκαναρισμένα</div><div class="stat-val" id="s-codes">0</div></div>
+    <div class="stat"><div class="stat-label">Νούμερα</div><div class="stat-val" id="s-sizes">0</div></div>
+    <div class="stat"><div class="stat-label">Σύνολο τεμάχια</div><div class="stat-val" id="s-total">0</div></div>
+  </div>
+  <div class="scan-area">
+    <div class="scan-row">
+      <input class="scan-input" id="barcode-input" placeholder="Σκανάρισμα barcode..." autocomplete="off"/>
+      <button class="btn" onclick="handleScan()">+ Καταχώριση</button>
+    </div>
+    <div class="hint">Σκανάρετε και πατήστε Enter — <span id="catalog-count">445</span> barcodes φορτωμένα · <strong style="color:#1e7e34">Αυτόματη αποθήκευση ενεργή</strong></div>
+    <div class="preview-box" id="preview">
+      <div class="preview-sku" id="prev-sku"></div>
+      <div class="preview-name" id="prev-name"></div>
+      <div class="preview-detail" id="prev-detail"></div>
+    </div>
+  </div>
+  <div class="actions-row">
+    <button class="btn btn-import" onclick="openImport()">↑ Εισαγωγή παραγγελίας Excel</button>
+    <button class="btn" onclick="openBulkPhotoImport()" style="background:#f3e8ff;border-color:#c084fc;color:#7c3aed;font-weight:500">📷 Μαζική εισαγωγή φωτογραφιών</button>
+    <button class="btn" id="manage-photos-btn" onclick="openManagePhotos()" style="background:#f3e8ff;border-color:#c084fc;color:#7c3aed;font-weight:500" title="Διαχείριση αποθηκευμένων φωτογραφιών">🗄️ Αποθήκη φωτ. <span id="photo-store-count" style="background:#7c3aed;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">…</span></button>
+    <button class="btn" onclick="openManageCatalog()" style="background:#fff7ed;border-color:#fdba74;color:#c2410c;font-weight:500">📋 Ανεβασμένα Excel <span id="catalog-extra-count" style="background:#c2410c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">0</span></button>
+    <button class="btn" onclick="exportCSV()">Εξαγωγή CSV</button>
+    <button class="btn" onclick="exportExcel()" style="background:#e6f4ea;border-color:#a8d5b5;color:#1e7e34;font-weight:500">📊 Εξαγωγή Excel (τελική παραλαβή)</button>
+    <button class="btn" onclick="exportPDF()" style="background:#fff3e0;border-color:#ffb74d;color:#e65100;font-weight:500">📄 Εξαγωγή PDF παραλαβής</button>
+    <button class="btn" onclick="openSaveReceipt()" style="background:#e6f4ea;border-color:#a8d5b5;color:#1e7e34;font-weight:500">💾 Αποθήκευση παραλαβής</button>
+    <button class="btn" onclick="exportJSON()" title="Backup δεδομένων">💾 Backup</button>
+    <button class="btn" onclick="importBackup()" title="Φόρτωση backup">📂 Φόρτωση backup</button>
+    <button class="btn" onclick="clearAll()" style="color:#c0392b">Εκκαθάριση</button>
+    <span class="save-indicator" id="save-ind">✓ Αποθηκεύτηκε</span>
+    <div class="photo-toggle-wrap" title="Εμφάνιση/απόκρυψη φωτογραφιών">
+      <span class="photo-toggle-label">📷 Φωτ.</span>
+      <label class="photo-toggle">
+        <input type="checkbox" id="photos-enabled" onchange="togglePhotosFeature(this.checked)">
+        <span class="photo-toggle-slider"></span>
+      </label>
+    </div>
+  </div>
+  <div id="inventory-list"></div>
+  <div id="empty-state" class="empty">Δεν υπάρχουν εγγραφές ακόμα.<br>Σκανάρετε ένα barcode ή εισάγετε παραγγελία Excel.</div>
+  </div><!-- end tab-scan -->
+
+  <!-- SAVED RECEIPTS TAB -->
+  <div class="tab-panel" id="tab-saved">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <div style="font-size:13px;color:#555">Επιλέξτε παραλαβή για επεξεργασία ή εξαγωγή PDF</div>
+      <button class="btn" onclick="deleteAllSaved()" style="color:#c0392b;font-size:12px">Διαγραφή όλων</button>
+    </div>
+    <div class="saved-list" id="saved-list"></div>
+    <div id="saved-empty" class="saved-empty" style="display:none">Δεν υπάρχουν αποθηκευμένες παραλαβές.<br>Πηγαίνετε στο Σκανάρισμα και πατήστε "Αποθήκευση παραλαβής".</div>
+  </div>
+</div>
+
+<!-- CSV Modal -->
+<div class="modal-bg" id="csv-modal">
+  <div class="modal-box">
+    <div class="modal-title">Εξαγωγή CSV</div>
+    <textarea class="csv-area" id="csv-area" readonly></textarea>
+    <div class="modal-hint">Ctrl+A → Ctrl+C → επικόλληση σε Excel</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="downloadCSV()">⬇ Κατέβασμα αρχείου</button>
+      <button class="btn" onclick="copyCSV()">Αντιγραφή</button>
+      <button class="btn" onclick="closeModal('csv-modal')">Κλείσιμο</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal-bg" id="import-modal">
+  <div class="modal-box" style="max-width:600px">
+    <div class="modal-title">Εισαγωγή παραγγελίας από Excel / CSV</div>
+    <div class="step-indicator" id="import-step">Βήμα 1 από 3 — Επιλογή αρχείου</div>
+    <div id="step1">
+      <div class="import-drop" id="drop-zone" onclick="document.getElementById('file-input').click()"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handleDrop(event)">
+        <div style="font-size:28px">📂</div>
+        <div class="import-drop-label">Κλικ ή σύρτε αρχείο εδώ</div>
+        <div class="import-drop-sub">Αποδεκτά: .xlsx, .xls, .csv</div>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(this.files[0])">
+      <div class="modal-hint">Το αρχείο πρέπει να έχει στήλη με barcodes. Προαιρετικά: στήλη ποσότητας.</div>
+      <div class="modal-actions"><button class="btn" onclick="closeModal('import-modal')">Ακύρωση</button></div>
+    </div>
+    <div id="step2" style="display:none">
+      <div style="font-size:12px;color:#555;margin-bottom:10px" id="file-info"></div>
+      <div class="import-cols">
+        <div class="col-select-wrap"><div class="col-label">Στήλη Barcode *</div><select class="col-select" id="col-barcode" onchange="updatePreview()"></select></div>
+        <div class="col-select-wrap"><div class="col-label">Στήλη Ποσότητας</div><select class="col-select" id="col-qty" onchange="updatePreview()"><option value="">— καμία (1 τεμ.) —</option></select></div>
+        <div class="col-select-wrap"><div class="col-label">Στήλη SKU</div><select class="col-select" id="col-sku" onchange="updatePreview()"><option value="">— καμία —</option></select></div>
+        <div class="col-select-wrap"><div class="col-label">Στήλη Νούμερου</div><select class="col-select" id="col-size" onchange="updatePreview()"><option value="">— καμία —</option></select></div>
+        <div class="col-select-wrap"><div class="col-label">Στήλη Τιμής €</div><select class="col-select" id="col-price" onchange="updatePreview()"><option value="">— καμία —</option></select></div>
+      </div>
+      <div style="font-size:11px;color:#888;margin-bottom:8px">Προεπισκόπηση (πρώτες 5 γραμμές):</div>
+      <div style="overflow-x:auto;margin-bottom:12px"><table class="import-preview-table" id="preview-table"></table></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="goStep(1)">← Πίσω</button>
+        <button class="btn btn-import" onclick="goStep(3)">Επόμενο →</button>
+      </div>
+    </div>
+    <div id="step3" style="display:none">
+      <div style="font-size:13px;color:#555;margin-bottom:12px" id="import-summary"></div>
+      <div style="overflow-x:auto;max-height:240px;overflow-y:auto;margin-bottom:12px"><table class="import-preview-table" id="confirm-table"></table></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="goStep(2)">← Πίσω</button>
+        <button class="btn btn-import" onclick="doImport()">Εισαγωγή στον κατάλογο</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Save Receipt Modal -->
+<div class="modal-bg" id="save-receipt-modal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-title">💾 Αποθήκευση Παραλαβής</div>
+    <div class="save-receipt-fields">
+      <div>
+        <label>Τίτλος *</label>
+        <input id="sr-title" placeholder="π.χ. Παραλαβή Fila Μάρτιος 2026">
+      </div>
+      <div>
+        <label>Ημερομηνία</label>
+        <input type="date" id="sr-date">
+      </div>
+    </div>
+    <div class="modal-hint" id="sr-hint"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('save-receipt-modal')">Ακύρωση</button>
+      <button class="btn btn-import" onclick="doSaveReceipt()">Αποθήκευση</button>
+    </div>
+  </div>
+</div>
+
+<!-- Backup Import -->
+<input type="file" id="backup-input" accept=".json" style="display:none" onchange="loadBackupFile(this.files[0])">
+
+<!-- Photo Input (single) -->
+<input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handlePhotoUpload(this.files[0])">
+
+<!-- Bulk Photo Input -->
+<input type="file" id="bulk-photo-input" accept="image/*" multiple style="display:none" onchange="handleBulkPhotoUpload(this.files)">
+
+<!-- Bulk Photo Modal -->
+<div class="modal-bg" id="bulk-photo-modal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-title">📷 Μαζική εισαγωγή φωτογραφιών</div>
+    <div style="font-size:12px;color:#555;margin-bottom:12px">
+      Το όνομα κάθε αρχείου πρέπει να είναι ο <strong>κωδικός SKU</strong> του προϊόντος.<br>
+      <span style="color:#888">π.χ. <code>B254WB007BCC8W0G.jpg</code> → SKU: B254WB007BCC8W0G</span>
+    </div>
+    <div class="import-drop" id="bulk-drop-zone" onclick="document.getElementById('bulk-photo-input').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleBulkPhotoDrop(event)">
+      <div style="font-size:28px">🖼️</div>
+      <div class="import-drop-label">Κλικ ή σύρτε φωτογραφίες εδώ</div>
+      <div class="import-drop-sub">Αποδεκτά: jpg, png, webp — πολλαπλά αρχεία</div>
+    </div>
+    <div id="bulk-photo-results" style="display:none;margin-top:8px"></div>
+    <div class="modal-actions" style="margin-top:12px">
+      <button class="btn" onclick="closeModal('bulk-photo-modal')">Κλείσιμο</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <span class="lightbox-close">✕</span>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Manage Catalog Modal -->
+<div class="modal-bg" id="manage-catalog-modal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-title">📋 Ανεβασμένα Excel — Επιπλέον Barcodes</div>
+    <div style="font-size:12px;color:#555;margin-bottom:10px">Αυτά είναι τα barcodes που προστέθηκαν μέσω εισαγωγής Excel (δεν υπήρχαν στον βασικό κατάλογο). Μπορείτε να διαγράψετε οποιοδήποτε SKU.</div>
+    <div id="manage-catalog-body" style="max-height:380px;overflow-y:auto;margin-bottom:12px"></div>
+    <div class="modal-actions">
+      <button class="btn" style="color:#c0392b;border-color:#fca5a5" onclick="clearAllCatalogExtra()">🗑️ Διαγραφή όλων</button>
+      <button class="btn" onclick="closeModal('manage-catalog-modal')">Κλείσιμο</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Photos Modal -->
+<div class="modal-bg" id="manage-photos-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-title">🗄️ Αποθήκη Φωτογραφιών</div>
+    <div id="manage-photos-body" style="font-size:13px;color:#555;margin-bottom:14px"></div>
+    <div class="modal-actions">
+      <button class="btn" style="color:#c0392b;border-color:#fca5a5" onclick="clearAllPhotos()">🗑️ Διαγραφή όλων</button>
+      <button class="btn" onclick="closeModal('manage-photos-modal')">Κλείσιμο</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATALOG_KEY='inv_catalog';
+const DATA_KEY='inv_data';
+
+// ---- BASE CATALOG ----
+const BASE_C={"191448678330":{"sku":"206750-1","size":"W10","name":""},"191448678361":{"sku":"206750-1","size":"W5","name":""},"191448678378":{"sku":"206750-1","size":"W6","name":""},"191448678385":{"sku":"206750-1","size":"W7","name":""},"191448678392":{"sku":"206750-1","size":"W8","name":""},"191448678408":{"sku":"206750-1","size":"W9","name":""},"191448678446":{"sku":"206750-100","size":"W5","name":""},"191448678453":{"sku":"206750-100","size":"W6","name":""},"191448678460":{"sku":"206750-100","size":"W7","name":""},"191448678477":{"sku":"206750-100","size":"W8","name":""},"191448678484":{"sku":"206750-100","size":"W9","name":""},"191448732834":{"sku":"206990-1","size":"C10","name":""},"191448732865":{"sku":"206990-1","size":"C6","name":""},"191448732872":{"sku":"206990-1","size":"C7","name":""},"191448732889":{"sku":"206990-1","size":"C8","name":""},"191448732896":{"sku":"206990-1","size":"C9","name":""},"191448732988":{"sku":"206990-100","size":"C4","name":""},"191448732995":{"sku":"206990-100","size":"C5","name":""},"191448733008":{"sku":"206990-100","size":"C6","name":""},"191448733022":{"sku":"206990-100","size":"C8","name":""},"191448733329":{"sku":"206990-410","size":"C10","name":""},"191448733336":{"sku":"206990-410","size":"C4","name":""},"191448733343":{"sku":"206990-410","size":"C5","name":""},"191448733350":{"sku":"206990-410","size":"C6","name":""},"191448733367":{"sku":"206990-410","size":"C7","name":""},"191448733374":{"sku":"206990-410","size":"C8","name":""},"191448733381":{"sku":"206990-410","size":"C9","name":""},"191448734234":{"sku":"206990-7C1","size":"C10","name":""},"191448734241":{"sku":"206990-7C1","size":"C4","name":""},"191448734258":{"sku":"206990-7C1","size":"C5","name":""},"191448734265":{"sku":"206990-7C1","size":"C6","name":""},"191448734272":{"sku":"206990-7C1","size":"C7","name":""},"191448734289":{"sku":"206990-7C1","size":"C8","name":""},"191448734296":{"sku":"206990-7C1","size":"C9","name":""},"191448734371":{"sku":"206991-1","size":"C11","name":""},"191448734388":{"sku":"206991-1","size":"C12","name":""},"191448734395":{"sku":"206991-1","size":"C13","name":""},"191448734401":{"sku":"206991-1","size":"J1","name":""},"191448734418":{"sku":"206991-1","size":"J2","name":""},"191448734425":{"sku":"206991-1","size":"J3","name":""},"191448734432":{"sku":"206991-1","size":"J4","name":""},"191448734449":{"sku":"206991-1","size":"J5","name":""},"191448734456":{"sku":"206991-1","size":"J6","name":""},"191448734579":{"sku":"206991-100","size":"C13","name":""},"191448734586":{"sku":"206991-100","size":"J1","name":""},"191448734593":{"sku":"206991-100","size":"J2","name":""},"191448734609":{"sku":"206991-100","size":"J3","name":""},"191448734616":{"sku":"206991-100","size":"J4","name":""},"191448734623":{"sku":"206991-100","size":"J5","name":""},"191448734630":{"sku":"206991-100","size":"J6","name":""},"191448735002":{"sku":"206991-410","size":"C11","name":""},"191448735019":{"sku":"206991-410","size":"C12","name":""},"191448735026":{"sku":"206991-410","size":"C13","name":""},"191448735057":{"sku":"206991-410","size":"J3","name":""},"191448735064":{"sku":"206991-410","size":"J4","name":""},"191448735071":{"sku":"206991-410","size":"J5","name":""},"191448735088":{"sku":"206991-410","size":"J6","name":""},"191448735637":{"sku":"206991-530","size":"C11","name":""},"191448735644":{"sku":"206991-530","size":"C12","name":""},"191448735651":{"sku":"206991-530","size":"C13","name":""},"191448735668":{"sku":"206991-530","size":"J1","name":""},"191448735675":{"sku":"206991-530","size":"J2","name":""},"191448735682":{"sku":"206991-530","size":"J3","name":""},"191448735699":{"sku":"206991-530","size":"J4","name":""},"191448735705":{"sku":"206991-530","size":"J5","name":""},"191448735712":{"sku":"206991-530","size":"J6","name":""},"191448869622":{"sku":"206990-6SW","size":"C10","name":""},"191448869639":{"sku":"206990-6SW","size":"C4","name":""},"191448869646":{"sku":"206990-6SW","size":"C5","name":""},"191448869653":{"sku":"206990-6SW","size":"C6","name":""},"191448869660":{"sku":"206990-6SW","size":"C7","name":""},"191448869677":{"sku":"206990-6SW","size":"C8","name":""},"191448869684":{"sku":"206990-6SW","size":"C9","name":""},"191448963467":{"sku":"206750-2Y2","size":"W5","name":""},"191448963474":{"sku":"206750-2Y2","size":"W6","name":""},"191448963481":{"sku":"206750-2Y2","size":"W7","name":""},"191448963498":{"sku":"206750-2Y2","size":"W8","name":""},"191448963504":{"sku":"206750-2Y2","size":"W9","name":""},"191448973404":{"sku":"207521-1","size":"M4/W6","name":""},"191448973411":{"sku":"207521-1","size":"M5/W7","name":""},"191448973428":{"sku":"207521-1","size":"M6/W8","name":""},"191448973435":{"sku":"207521-1","size":"M7/W9","name":""},"191448973442":{"sku":"207521-1","size":"M8/W10","name":""},"191448973640":{"sku":"207521-100","size":"M4/W6","name":""},"191448973657":{"sku":"207521-100","size":"M5/W7","name":""},"191448973664":{"sku":"207521-100","size":"M6/W8","name":""},"191448973671":{"sku":"207521-100","size":"M7/W9","name":""},"191448973688":{"sku":"207521-100","size":"M8/W10","name":""},"196265132027":{"sku":"10001-2Y2","size":"M7/W9","name":""},"196265132034":{"sku":"10001-2Y2","size":"M8/W10","name":""},"196265132041":{"sku":"10001-2Y2","size":"M9/W11","name":""},"196265146314":{"sku":"206990-4KZ","size":"C10","name":""},"196265146321":{"sku":"206990-4KZ","size":"C4","name":""},"196265146338":{"sku":"206990-4KZ","size":"C5","name":""},"196265146345":{"sku":"206990-4KZ","size":"C6","name":""},"196265146352":{"sku":"206990-4KZ","size":"C7","name":""},"196265146369":{"sku":"206990-4KZ","size":"C8","name":""},"196265146376":{"sku":"206990-4KZ","size":"C9","name":""},"196265146383":{"sku":"206991-4KZ","size":"C11","name":""},"196265146390":{"sku":"206991-4KZ","size":"C12","name":""},"196265146406":{"sku":"206991-4KZ","size":"C13","name":""},"196265146413":{"sku":"206991-4KZ","size":"J1","name":""},"196265146420":{"sku":"206991-4KZ","size":"J2","name":""},"196265146437":{"sku":"206991-4KZ","size":"J3","name":""},"196265146444":{"sku":"206991-4KZ","size":"J4","name":""},"196265146451":{"sku":"206991-4KZ","size":"J5","name":""},"196265146468":{"sku":"206991-4KZ","size":"J6","name":""},"196265164189":{"sku":"206991-2Y2","size":"C11","name":""},"196265164196":{"sku":"206991-2Y2","size":"C12","name":""},"196265164202":{"sku":"206991-2Y2","size":"C13","name":""},"196265164219":{"sku":"206991-2Y2","size":"J1","name":""},"196265164226":{"sku":"206991-2Y2","size":"J2","name":""},"196265164233":{"sku":"206991-2Y2","size":"J3","name":""},"196265164240":{"sku":"206991-2Y2","size":"J4","name":""},"196265164257":{"sku":"206991-2Y2","size":"J5","name":""},"196265164264":{"sku":"206991-2Y2","size":"J6","name":""},"196265255214":{"sku":"206990-2Y2","size":"C10","name":""},"196265255221":{"sku":"206990-2Y2","size":"C4","name":""},"196265255238":{"sku":"206990-2Y2","size":"C5","name":""},"196265255245":{"sku":"206990-2Y2","size":"C6","name":""},"196265255252":{"sku":"206990-2Y2","size":"C7","name":""},"196265255269":{"sku":"206990-2Y2","size":"C8","name":""},"196265255276":{"sku":"206990-2Y2","size":"C9","name":""},"196265277254":{"sku":"208392-1","size":"M8/W10","name":""},"196265277261":{"sku":"208392-1","size":"M9/W11","name":""},"196265395217":{"sku":"206990-6WC","size":"C10","name":""},"196265395224":{"sku":"206990-6WC","size":"C4","name":""},"196265395231":{"sku":"206990-6WC","size":"C5","name":""},"196265395248":{"sku":"206990-6WC","size":"C6","name":""},"196265395255":{"sku":"206990-6WC","size":"C7","name":""},"196265395262":{"sku":"206990-6WC","size":"C8","name":""},"196265395279":{"sku":"206990-6WC","size":"C9","name":""},"196265395286":{"sku":"206991-4NS","size":"C11","name":""},"196265395293":{"sku":"206991-4NS","size":"C12","name":""},"196265395309":{"sku":"206991-4NS","size":"C13","name":""},"196265395316":{"sku":"206991-4NS","size":"J1","name":""},"196265395323":{"sku":"206991-4NS","size":"J2","name":""},"196265395330":{"sku":"206991-4NS","size":"J3","name":""},"196265395347":{"sku":"206991-4NS","size":"J4","name":""},"196265395354":{"sku":"206991-4NS","size":"J5","name":""},"196265395361":{"sku":"206991-4NS","size":"J6","name":""},"196265532049":{"sku":"10001-6UR","size":"M4/W6","name":""},"196265532056":{"sku":"10001-6UR","size":"M5/W7","name":""},"196265532063":{"sku":"10001-6UR","size":"M6/W8","name":""},"196265532070":{"sku":"10001-6UR","size":"M7/W9","name":""},"196265545407":{"sku":"206750-6UR","size":"W5","name":""},"196265545414":{"sku":"206750-6UR","size":"W6","name":""},"196265545421":{"sku":"206750-6UR","size":"W7","name":""},"196265545438":{"sku":"206750-6UR","size":"W8","name":""},"196265545445":{"sku":"206750-6UR","size":"W9","name":""},"196265555529":{"sku":"207521-6UR","size":"M4/W6","name":""},"196265555536":{"sku":"207521-6UR","size":"M5/W7","name":""},"196265555543":{"sku":"207521-6UR","size":"M6/W8","name":""},"196265555550":{"sku":"207521-6UR","size":"M7/W9","name":""},"196265555567":{"sku":"207521-6UR","size":"M8/W10","name":""},"196265603619":{"sku":"209423-4OT","size":"C11","name":""},"196265603626":{"sku":"209423-4OT","size":"C12","name":""},"196265603633":{"sku":"209423-4OT","size":"C13","name":""},"196265603640":{"sku":"209423-4OT","size":"J1","name":""},"196265603657":{"sku":"209423-4OT","size":"J2","name":""},"196265603664":{"sku":"209423-4OT","size":"J3","name":""},"196265603732":{"sku":"209423-84I","size":"C11","name":""},"196265603749":{"sku":"209423-84I","size":"C12","name":""},"196265603756":{"sku":"209423-84I","size":"C13","name":""},"196265603763":{"sku":"209423-84I","size":"J1","name":""},"196265603770":{"sku":"209423-84I","size":"J2","name":""},"196265603787":{"sku":"209423-84I","size":"J3","name":""},"196265604005":{"sku":"209424-4OT","size":"C10","name":""},"196265604012":{"sku":"209424-4OT","size":"C4","name":""},"196265604029":{"sku":"209424-4OT","size":"C5","name":""},"196265604036":{"sku":"209424-4OT","size":"C6","name":""},"196265604043":{"sku":"209424-4OT","size":"C7","name":""},"196265604050":{"sku":"209424-4OT","size":"C8","name":""},"196265604067":{"sku":"209424-4OT","size":"C9","name":""},"196265604708":{"sku":"209424-84I","size":"C10","name":""},"196265604715":{"sku":"209424-84I","size":"C4","name":""},"196265604722":{"sku":"209424-84I","size":"C5","name":""},"196265604739":{"sku":"209424-84I","size":"C6","name":""},"196265604746":{"sku":"209424-84I","size":"C7","name":""},"196265604753":{"sku":"209424-84I","size":"C8","name":""},"196265604760":{"sku":"209424-84I","size":"C9","name":""},"196265635900":{"sku":"209423-4OT","size":"J4","name":""},"196265635917":{"sku":"209423-4OT","size":"J5","name":""},"196265635924":{"sku":"209423-4OT","size":"J6","name":""},"196265635962":{"sku":"209423-84I","size":"J4","name":""},"196265635979":{"sku":"209423-84I","size":"J5","name":""},"196265635986":{"sku":"209423-84I","size":"J6","name":""},"196265658046":{"sku":"209423-1NJ","size":"C11","name":""},"196265658053":{"sku":"209423-1NJ","size":"C12","name":""},"196265658060":{"sku":"209423-1NJ","size":"C13","name":""},"196265658077":{"sku":"209423-1NJ","size":"J1","name":""},"196265658084":{"sku":"209423-1NJ","size":"J2","name":""},"196265658091":{"sku":"209423-1NJ","size":"J3","name":""},"196265658107":{"sku":"209423-1NJ","size":"J4","name":""},"196265658114":{"sku":"209423-1NJ","size":"J5","name":""},"196265658121":{"sku":"209423-1NJ","size":"J6","name":""},"196265658220":{"sku":"209424-1NJ","size":"C10","name":""},"196265658237":{"sku":"209424-1NJ","size":"C4","name":""},"196265658244":{"sku":"209424-1NJ","size":"C5","name":""},"196265658251":{"sku":"209424-1NJ","size":"C6","name":""},"196265658268":{"sku":"209424-1NJ","size":"C7","name":""},"196265658275":{"sku":"209424-1NJ","size":"C8","name":""},"196265658282":{"sku":"209424-1NJ","size":"C9","name":""},"198445100642":{"sku":"11033-0DD","size":"M8/W10","name":""},"198445100659":{"sku":"11033-0DD","size":"M9/W11","name":""},"198445100789":{"sku":"11033-0EX","size":"M8/W10","name":""},"198445100796":{"sku":"11033-0EX","size":"M9/W11","name":""},"198445102875":{"sku":"206990-6ZW","size":"C10","name":""},"198445102882":{"sku":"206990-6ZW","size":"C4","name":""},"198445102899":{"sku":"206990-6ZW","size":"C5","name":""},"198445102905":{"sku":"206990-6ZW","size":"C6","name":""},"198445102912":{"sku":"206990-6ZW","size":"C7","name":""},"198445102929":{"sku":"206990-6ZW","size":"C8","name":""},"198445102936":{"sku":"206990-6ZW","size":"C9","name":""},"198445103193":{"sku":"206991-6ZW","size":"C11","name":""},"198445103209":{"sku":"206991-6ZW","size":"C12","name":""},"198445103216":{"sku":"206991-6ZW","size":"C13","name":""},"198445103223":{"sku":"206991-6ZW","size":"J1","name":""},"198445103230":{"sku":"206991-6ZW","size":"J2","name":""},"198445103247":{"sku":"206991-6ZW","size":"J3","name":""},"198445103254":{"sku":"206991-6ZW","size":"J4","name":""},"198445103261":{"sku":"206991-6ZW","size":"J5","name":""},"198445103278":{"sku":"206991-6ZW","size":"J6","name":""},"198445105326":{"sku":"208392-410","size":"M8/W10","name":""},"198445105333":{"sku":"208392-410","size":"M9/W11","name":""},"198445114014":{"sku":"210615-1","size":"J2","name":""},"198445114021":{"sku":"210615-1","size":"J3","name":""},"198445114038":{"sku":"210615-1","size":"J4","name":""},"198445114045":{"sku":"210615-1","size":"J5","name":""},"198445114069":{"sku":"210615-0WV","size":"C11","name":""},"198445114076":{"sku":"210615-0WV","size":"C12","name":""},"198445114083":{"sku":"210615-0WV","size":"C13","name":""},"198445114090":{"sku":"210615-0WV","size":"J1","name":""},"198445114106":{"sku":"210615-0WV","size":"J2","name":""},"198445114113":{"sku":"210615-0WV","size":"J3","name":""},"198445114120":{"sku":"210615-0WV","size":"J4","name":""},"198445114137":{"sku":"210615-0WV","size":"J5","name":""},"198445114243":{"sku":"210615-6ZW","size":"C11","name":""},"198445114250":{"sku":"210615-6ZW","size":"C12","name":""},"198445114267":{"sku":"210615-6ZW","size":"C13","name":""},"198445114274":{"sku":"210615-6ZW","size":"J1","name":""},"198445114281":{"sku":"210615-6ZW","size":"J2","name":""},"198445114298":{"sku":"210615-6ZW","size":"J3","name":""},"198445114304":{"sku":"210615-6ZW","size":"J4","name":""},"198445114311":{"sku":"210615-6ZW","size":"J5","name":""},"198445114632":{"sku":"210616-6ZW","size":"C10","name":""},"198445114670":{"sku":"210616-6ZW","size":"C7","name":""},"198445114687":{"sku":"210616-6ZW","size":"C8","name":""},"198445114694":{"sku":"210616-6ZW","size":"C9","name":""},"198445125591":{"sku":"211054-309","size":"C11","name":""},"198445125607":{"sku":"211054-309","size":"C12","name":""},"198445125614":{"sku":"211054-309","size":"C13","name":""},"198445125621":{"sku":"211054-309","size":"J1","name":""},"198445125638":{"sku":"211054-309","size":"J2","name":""},"198445125645":{"sku":"211054-309","size":"J3","name":""},"198445125652":{"sku":"211055-309","size":"C10","name":""},"198445125669":{"sku":"211055-309","size":"C4","name":""},"198445125676":{"sku":"211055-309","size":"C5","name":""},"198445125683":{"sku":"211055-309","size":"C6","name":""},"198445125690":{"sku":"211055-309","size":"C7","name":""},"198445125706":{"sku":"211055-309","size":"C8","name":""},"198445125713":{"sku":"211055-309","size":"C9","name":""},"198445153105":{"sku":"211054-4CC","size":"C11","name":""},"198445153112":{"sku":"211054-4CC","size":"C12","name":""},"198445153129":{"sku":"211054-4CC","size":"C13","name":""},"198445153136":{"sku":"211054-4CC","size":"J1","name":""},"198445153143":{"sku":"211054-4CC","size":"J2","name":""},"198445153150":{"sku":"211054-4CC","size":"J3","name":""},"198445153167":{"sku":"211054-6QQ","size":"C11","name":""},"198445153174":{"sku":"211054-6QQ","size":"C12","name":""},"198445153181":{"sku":"211054-6QQ","size":"C13","name":""},"198445153198":{"sku":"211054-6QQ","size":"J1","name":""},"198445153204":{"sku":"211054-6QQ","size":"J2","name":""},"198445153211":{"sku":"211054-6QQ","size":"J3","name":""},"198445153228":{"sku":"211055-4CC","size":"C10","name":""},"198445153242":{"sku":"211055-4CC","size":"C5","name":""},"198445153259":{"sku":"211055-4CC","size":"C6","name":""},"198445153266":{"sku":"211055-4CC","size":"C7","name":""},"198445153273":{"sku":"211055-4CC","size":"C8","name":""},"198445153280":{"sku":"211055-4CC","size":"C9","name":""},"198445153297":{"sku":"211055-6QQ","size":"C10","name":""},"198445153303":{"sku":"211055-6QQ","size":"C4","name":""},"198445153310":{"sku":"211055-6QQ","size":"C5","name":""},"198445153327":{"sku":"211055-6QQ","size":"C6","name":""},"198445153334":{"sku":"211055-6QQ","size":"C7","name":""},"198445153341":{"sku":"211055-6QQ","size":"C8","name":""},"198445153358":{"sku":"211055-6QQ","size":"C9","name":""},"198445277511":{"sku":"211385-1","size":"M9","name":""},"198445284847":{"sku":"211892-4WH","size":"C10","name":""},"198445284854":{"sku":"211892-4WH","size":"C4","name":""},"198445284861":{"sku":"211892-4WH","size":"C5","name":""},"198445284878":{"sku":"211892-4WH","size":"C6","name":""},"198445284885":{"sku":"211892-4WH","size":"C7","name":""},"198445284892":{"sku":"211892-4WH","size":"C8","name":""},"198445284908":{"sku":"211892-4WH","size":"C9","name":""},"198445284915":{"sku":"211892-5BO","size":"C10","name":""},"198445284922":{"sku":"211892-5BO","size":"C4","name":""},"198445284939":{"sku":"211892-5BO","size":"C5","name":""},"198445284946":{"sku":"211892-5BO","size":"C6","name":""},"198445284953":{"sku":"211892-5BO","size":"C7","name":""},"198445284960":{"sku":"211892-5BO","size":"C8","name":""},"198445284977":{"sku":"211892-5BO","size":"C9","name":""},"198445337215":{"sku":"206990-510","size":"C10","name":""},"198445337222":{"sku":"206990-510","size":"C4","name":""},"198445337239":{"sku":"206990-510","size":"C5","name":""},"198445337246":{"sku":"206990-510","size":"C6","name":""},"198445337253":{"sku":"206990-510","size":"C7","name":""},"198445337260":{"sku":"206990-510","size":"C8","name":""},"198445337277":{"sku":"206990-510","size":"C9","name":""},"198445337628":{"sku":"206991-510","size":"C11","name":""},"198445337635":{"sku":"206991-510","size":"C12","name":""},"198445337642":{"sku":"206991-510","size":"C13","name":""},"198445337659":{"sku":"206991-510","size":"J1","name":""},"198445337666":{"sku":"206991-510","size":"J2","name":""},"198445337673":{"sku":"206991-510","size":"J3","name":""},"198445337680":{"sku":"206991-510","size":"J4","name":""},"198445337697":{"sku":"206991-510","size":"J5","name":""},"198445337703":{"sku":"206991-510","size":"J6","name":""},"198445342509":{"sku":"209423-4MO","size":"C11","name":""},"198445342516":{"sku":"209423-4MO","size":"C12","name":""},"198445342523":{"sku":"209423-4MO","size":"C13","name":""},"198445342530":{"sku":"209423-4MO","size":"J1","name":""},"198445342547":{"sku":"209423-4MO","size":"J2","name":""},"198445342554":{"sku":"209423-4MO","size":"J3","name":""},"198445342561":{"sku":"209423-4MO","size":"J4","name":""},"198445342578":{"sku":"209423-4MO","size":"J5","name":""},"198445342585":{"sku":"209423-4MO","size":"J6","name":""},"198445342592":{"sku":"209423-6WQ","size":"C11","name":""},"198445342608":{"sku":"209423-6WQ","size":"C12","name":""},"198445342615":{"sku":"209423-6WQ","size":"C13","name":""},"198445342622":{"sku":"209423-6WQ","size":"J1","name":""},"198445342639":{"sku":"209423-6WQ","size":"J2","name":""},"198445342646":{"sku":"209423-6WQ","size":"J3","name":""},"198445342653":{"sku":"209423-6WQ","size":"J4","name":""},"198445342660":{"sku":"209423-6WQ","size":"J5","name":""},"198445342677":{"sku":"209423-6WQ","size":"J6","name":""},"198445343957":{"sku":"211054-5AF","size":"C11","name":""},"198445343964":{"sku":"211054-5AF","size":"C12","name":""},"198445343971":{"sku":"211054-5AF","size":"C13","name":""},"198445343988":{"sku":"211054-5AF","size":"J1","name":""},"198445343995":{"sku":"211054-5AF","size":"J2","name":""},"198445344008":{"sku":"211054-5AF","size":"J3","name":""},"198445348921":{"sku":"212669-2MT","size":"C10","name":""},"198445348938":{"sku":"212669-2MT","size":"C4","name":""},"198445348945":{"sku":"212669-2MT","size":"C5","name":""},"198445348952":{"sku":"212669-2MT","size":"C6","name":""},"198445348969":{"sku":"212669-2MT","size":"C7","name":""},"198445348976":{"sku":"212669-2MT","size":"C8","name":""},"198445348983":{"sku":"212669-2MT","size":"C9","name":""},"198445357565":{"sku":"209424-4MO","size":"C10","name":""},"198445357572":{"sku":"209424-4MO","size":"C4","name":""},"198445357589":{"sku":"209424-4MO","size":"C5","name":""},"198445357596":{"sku":"209424-4MO","size":"C6","name":""},"198445357602":{"sku":"209424-4MO","size":"C7","name":""},"198445357619":{"sku":"209424-4MO","size":"C8","name":""},"198445357626":{"sku":"209424-4MO","size":"C9","name":""},"198445357633":{"sku":"209424-6WQ","size":"C10","name":""},"198445357640":{"sku":"209424-6WQ","size":"C4","name":""},"198445357657":{"sku":"209424-6WQ","size":"C5","name":""},"198445357664":{"sku":"209424-6WQ","size":"C6","name":""},"198445357671":{"sku":"209424-6WQ","size":"C7","name":""},"198445357688":{"sku":"209424-6WQ","size":"C8","name":""},"198445357695":{"sku":"209424-6WQ","size":"C9","name":""},"198445358180":{"sku":"209754-7CI","size":"C11","name":""},"198445358197":{"sku":"209754-7CI","size":"C12","name":""},"198445358203":{"sku":"209754-7CI","size":"C13","name":""},"198445358210":{"sku":"209754-7CI","size":"J1","name":""},"198445358227":{"sku":"209754-7CI","size":"J2","name":""},"198445358234":{"sku":"209754-7CI","size":"J3","name":""},"198445358241":{"sku":"209754-7CI","size":"J4","name":""},"198445358258":{"sku":"209754-7CI","size":"J5","name":""},"198445358357":{"sku":"209755-7CI","size":"C10","name":""},"198445358364":{"sku":"209755-7CI","size":"C4","name":""},"198445358371":{"sku":"209755-7CI","size":"C5","name":""},"198445358388":{"sku":"209755-7CI","size":"C6","name":""},"198445358395":{"sku":"209755-7CI","size":"C7","name":""},"198445358401":{"sku":"209755-7CI","size":"C8","name":""},"198445358418":{"sku":"209755-7CI","size":"C9","name":""},"198445363160":{"sku":"212495-2MT","size":"C11","name":""},"198445363177":{"sku":"212495-2MT","size":"C12","name":""},"198445363184":{"sku":"212495-2MT","size":"C13","name":""},"198445363191":{"sku":"212495-2MT","size":"J1","name":""},"198445363207":{"sku":"212495-2MT","size":"J2","name":""},"198445363214":{"sku":"212495-2MT","size":"J3","name":""},"198445363221":{"sku":"212495-2MT","size":"J4","name":""},"198445363238":{"sku":"212495-2MT","size":"J5","name":""},"198445363245":{"sku":"212495-2MT","size":"J6","name":""},"198445363986":{"sku":"212514-1FT","size":"C10","name":""},"198445363993":{"sku":"212514-1FT","size":"C4","name":""},"198445364006":{"sku":"212514-1FT","size":"C5","name":""},"198445364013":{"sku":"212514-1FT","size":"C6","name":""},"198445364020":{"sku":"212514-1FT","size":"C7","name":""},"198445364037":{"sku":"212514-1FT","size":"C8","name":""},"198445364044":{"sku":"212514-1FT","size":"C9","name":""},"198445364129":{"sku":"212515-7CJ","size":"C10","name":""},"198445364136":{"sku":"212515-7CJ","size":"C4","name":""},"198445364143":{"sku":"212515-7CJ","size":"C5","name":""},"198445364150":{"sku":"212515-7CJ","size":"C6","name":""},"198445364167":{"sku":"212515-7CJ","size":"C7","name":""},"198445364174":{"sku":"212515-7CJ","size":"C8","name":""},"198445364181":{"sku":"212515-7CJ","size":"C9","name":""},"198445370465":{"sku":"212562-100","size":"C10","name":""},"198445370472":{"sku":"212562-100","size":"C4","name":""},"198445370489":{"sku":"212562-100","size":"C5","name":""},"198445370496":{"sku":"212562-100","size":"C6","name":""},"198445370502":{"sku":"212562-100","size":"C7","name":""},"198445370519":{"sku":"212562-100","size":"C8","name":""},"198445370526":{"sku":"212562-100","size":"C9","name":""},"198445399138":{"sku":"209423-1ZP","size":"C11","name":""},"198445399145":{"sku":"209423-1ZP","size":"C12","name":""},"198445399152":{"sku":"209423-1ZP","size":"C13","name":""},"198445399169":{"sku":"209423-1ZP","size":"J1","name":""},"198445399176":{"sku":"209423-1ZP","size":"J2","name":""},"198445399183":{"sku":"209423-1ZP","size":"J3","name":""},"198445399190":{"sku":"209423-1ZP","size":"J4","name":""},"198445399206":{"sku":"209423-1ZP","size":"J5","name":""},"198445399213":{"sku":"209423-1ZP","size":"J6","name":""},"198445399220":{"sku":"209423-4XQ","size":"C11","name":""},"198445399237":{"sku":"209423-4XQ","size":"C12","name":""},"198445399244":{"sku":"209423-4XQ","size":"C13","name":""},"198445399251":{"sku":"209423-4XQ","size":"J1","name":""},"198445399268":{"sku":"209423-4XQ","size":"J2","name":""},"198445399275":{"sku":"209423-4XQ","size":"J3","name":""},"198445399282":{"sku":"209423-4XQ","size":"J4","name":""},"198445399299":{"sku":"209423-4XQ","size":"J5","name":""},"198445399305":{"sku":"209423-4XQ","size":"J6","name":""},"198445399312":{"sku":"209424-1ZP","size":"C10","name":""},"198445399329":{"sku":"209424-1ZP","size":"C4","name":""},"198445399336":{"sku":"209424-1ZP","size":"C5","name":""},"198445399343":{"sku":"209424-1ZP","size":"C6","name":""},"198445399350":{"sku":"209424-1ZP","size":"C7","name":""},"198445399367":{"sku":"209424-1ZP","size":"C8","name":""},"198445399374":{"sku":"209424-1ZP","size":"C9","name":""},"198445399381":{"sku":"209424-4XQ","size":"C10","name":""},"198445399398":{"sku":"209424-4XQ","size":"C4","name":""},"198445399404":{"sku":"209424-4XQ","size":"C5","name":""},"198445399411":{"sku":"209424-4XQ","size":"C6","name":""},"198445399428":{"sku":"209424-4XQ","size":"C7","name":""},"198445399435":{"sku":"209424-4XQ","size":"C8","name":""},"198445399442":{"sku":"209424-4XQ","size":"C9","name":""},"198445400124":{"sku":"211055-5AF","size":"C10","name":""},"198445400131":{"sku":"211055-5AF","size":"C4","name":""},"198445400148":{"sku":"211055-5AF","size":"C5","name":""},"198445400155":{"sku":"211055-5AF","size":"C6","name":""},"198445400162":{"sku":"211055-5AF","size":"C7","name":""},"198445400179":{"sku":"211055-5AF","size":"C8","name":""},"198445400186":{"sku":"211055-5AF","size":"C9","name":""},"198445406904":{"sku":"213269-5AD","size":"C11","name":""},"198445406911":{"sku":"213269-5AD","size":"C12","name":""},"198445406928":{"sku":"213269-5AD","size":"C13","name":""},"198445406935":{"sku":"213269-5AD","size":"J1","name":""},"198445406942":{"sku":"213269-5AD","size":"J2","name":""},"198445406959":{"sku":"213269-5AD","size":"J3","name":""},"198445406966":{"sku":"213269-5AD","size":"J4","name":""},"198445406973":{"sku":"213269-5AD","size":"J5","name":""},"198445406980":{"sku":"213269-5AD","size":"J6","name":""},"198445406997":{"sku":"213270-5AD","size":"C10","name":""},"198445407000":{"sku":"213270-5AD","size":"C4","name":""},"198445407017":{"sku":"213270-5AD","size":"C5","name":""},"198445407024":{"sku":"213270-5AD","size":"C6","name":""},"198445407031":{"sku":"213270-5AD","size":"C7","name":""},"198445407048":{"sku":"213270-5AD","size":"C8","name":""},"198445407055":{"sku":"213270-5AD","size":"C9","name":""},"841158002443":{"sku":"10001-1","size":"M7/W9","name":""},"841158002450":{"sku":"10001-1","size":"M8/W10","name":""},"841158002467":{"sku":"10001-1","size":"M9/W11","name":""},"841158002726":{"sku":"10001-410","size":"M7/W9","name":""},"841158002733":{"sku":"10001-410","size":"M8/W10","name":""},"841158002740":{"sku":"10001-410","size":"M9/W11","name":""},"883503185630":{"sku":"10001-100","size":"M7/W9","name":""},"883503185647":{"sku":"10001-100","size":"M8/W10","name":""},"883503185654":{"sku":"10001-100","size":"M9/W11","name":""},"8059003077344":{"sku":"F2116-321","size":"23-26","name":"Fila κάλτσες F2116-321"},"8059003077351":{"sku":"F2116-321","size":"27-30","name":"Fila κάλτσες F2116-321"},"8059003077368":{"sku":"F2116-321","size":"31-34","name":"Fila κάλτσες F2116-321"},"8059003077375":{"sku":"F2116-321","size":"35-38","name":"Fila κάλτσες F2116-321"},"8059003077702":{"sku":"F1432-497","size":"23-26","name":"Fila κάλτσες F1432-497"},"8059003077719":{"sku":"F1432-497","size":"27-30","name":"Fila κάλτσες F1432-497"},"8059003077726":{"sku":"F1432-497","size":"31-34","name":"Fila κάλτσες F1432-497"},"8059003077733":{"sku":"F1432-497","size":"35-38","name":"Fila κάλτσες F1432-497"},"8059003077788":{"sku":"F1433-331","size":"23-26","name":"Fila κάλτσες F1433-331"},"8059003077795":{"sku":"F1433-331","size":"27-30","name":"Fila κάλτσες F1433-331"},"8059003077801":{"sku":"F1433-331","size":"31-34","name":"Fila κάλτσες F1433-331"},"8059003077818":{"sku":"F1433-331","size":"35-38","name":"Fila κάλτσες F1433-331"},"8059003078150":{"sku":"F2121-144","size":"27-30","name":"Fila κάλτσες F2121-144"},"8059003078167":{"sku":"F2121-144","size":"31-34","name":"Fila κάλτσες F2121-144"},"8059003078174":{"sku":"F2121-144","size":"35-38","name":"Fila κάλτσες F2121-144"},"8059003078181":{"sku":"F2121-270","size":"23-26","name":"Fila κάλτσες F2121-270"},"8059003078198":{"sku":"F2121-270","size":"27-30","name":"Fila κάλτσες F2121-270"},"8059003078204":{"sku":"F2121-270","size":"31-34","name":"Fila κάλτσες F2121-270"},"8059003078211":{"sku":"F2121-270","size":"35-38","name":"Fila κάλτσες F2121-270"},"8059003078426":{"sku":"F2124-845","size":"23-26","name":"Fila κάλτσες F2124-845"},"8059003078433":{"sku":"F2124-845","size":"27-30","name":"Fila κάλτσες F2124-845"},"8059003078440":{"sku":"F2124-845","size":"31-34","name":"Fila κάλτσες F2124-845"},"8059003078457":{"sku":"F2124-845","size":"35-38","name":"Fila κάλτσες F2124-845"},"8059003078587":{"sku":"F1436-813","size":"23-26","name":"Fila κάλτσες F1436-813"},"8059003078594":{"sku":"F1436-813","size":"27-30","name":"Fila κάλτσες F1436-813"},"8059003078600":{"sku":"F1436-813","size":"31-34","name":"Fila κάλτσες F1436-813"},"8059003078617":{"sku":"F1436-813","size":"35-38","name":"Fila κάλτσες F1436-813"},"8059003078624":{"sku":"F1437-271","size":"23-26","name":"Fila κάλτσες F1437-271"},"8059003078631":{"sku":"F1437-271","size":"27-30","name":"Fila κάλτσες F1437-271"},"8059003078648":{"sku":"F1437-271","size":"31-34","name":"Fila κάλτσες F1437-271"},"8059003078655":{"sku":"F1437-271","size":"35-38","name":"Fila κάλτσες F1437-271"},"8300958140127":{"sku":"F8338-300","size":"23-26","name":"Fila κάλτσες F8338-300"},"8300958140134":{"sku":"F8338-300","size":"27-30","name":"Fila κάλτσες F8338-300"},"8300958140141":{"sku":"F8338-300","size":"31-34","name":"Fila κάλτσες F8338-300"},"8300958440005":{"sku":"F9398-300","size":"39-42","name":"Fila κάλτσες F9398-300"},"8300958440012":{"sku":"F9398-300","size":"43-46","name":"Fila κάλτσες F9398-300"},"8300958440029":{"sku":"F9398-200","size":"39-42","name":"Fila κάλτσες F9398-200"},"8300958440036":{"sku":"F9398-200","size":"43-46","name":"Fila κάλτσες F9398-200"},"8300958580985":{"sku":"F8338-700","size":"23-26","name":"Fila κάλτσες F8338-700"},"8300958580992":{"sku":"F8338-700","size":"27-30","name":"Fila κάλτσες F8338-700"},"8300958581005":{"sku":"F8338-700","size":"31-34","name":"Fila κάλτσες F8338-700"},"8300958740419":{"sku":"F9398-700","size":"39-42","name":"Fila κάλτσες F9398-700"},"8300958881419":{"sku":"F1709-300","size":"39-42","name":"Fila κάλτσες F1709-300"},"8300958881471":{"sku":"F1709-321","size":"39-42","name":"Fila κάλτσες F1709-321"},"8300958897618":{"sku":"F8199-3-920","size":"23-26","name":"Fila κάλτσες F8199-3-920"},"8300958897625":{"sku":"F8199-3-920","size":"27-30","name":"Fila κάλτσες F8199-3-920"},"8300958897632":{"sku":"F8199-3-920","size":"31-34","name":"Fila κάλτσες F8199-3-920"},"8300958897670":{"sku":"F8199-3-471","size":"23-26","name":"Fila κάλτσες F8199-3-471"},"8300958897687":{"sku":"F8199-3-471","size":"27-30","name":"Fila κάλτσες F8199-3-471"},"8300958897694":{"sku":"F8199-3-471","size":"31-34","name":"Fila κάλτσες F8199-3-471"},"8300958897793":{"sku":"F8338-471","size":"23-26","name":"Fila κάλτσες F8338-471"},"8300958897809":{"sku":"F8338-471","size":"27-30","name":"Fila κάλτσες F8338-471"},"8300958897816":{"sku":"F8338-471","size":"31-34","name":"Fila κάλτσες F8338-471"}};
+
+// Catalog (base + any extras) and inventory data are loaded from IndexedDB asynchronously — see initApp() at the end of this script.
+let C = Object.assign({}, BASE_C);
+let data = {}, collapsed = {}, parsedRows = [], importHeaders = [];
+
+function saveAll() {
+  const extra = {};
+  Object.keys(C).forEach(k => { if (!BASE_C[k]) extra[k] = C[k]; });
+  return Promise.all([
+    idbKvSet(DATA_KEY, data),
+    idbKvSet('inv_catalog_extra', extra)
+  ]).then(() => {
+    const ind = document.getElementById('save-ind');
+    ind.classList.add('show');
+    clearTimeout(window._saveT);
+    window._saveT = setTimeout(() => ind.classList.remove('show'), 2000);
+  }).catch(() => showToast('Σφάλμα αποθήκευσης!', true));
+}
+
+const inp = document.getElementById('barcode-input');
+inp.focus();
+inp.addEventListener('keydown', e => { if (e.key === 'Enter') handleScan(); });
+inp.addEventListener('input', livePreview);
+
+function livePreview() {
+  const raw = inp.value.trim();
+  const p = document.getElementById('preview');
+  if (!raw) { p.style.display = 'none'; return; }
+  const e = C[raw];
+  if (e) {
+    p.className = 'preview-box'; p.style.display = 'block';
+    document.getElementById('prev-sku').textContent = e.sku;
+    document.getElementById('prev-name').textContent = e.name || '';
+    document.getElementById('prev-detail').textContent = 'Νούμερο: ' + e.size + '   |   Barcode: ' + raw;
+  } else {
+    p.className = 'preview-box err'; p.style.display = 'block';
+    document.getElementById('prev-sku').textContent = 'Barcode δεν βρέθηκε στον κατάλογο';
+    document.getElementById('prev-name').textContent = '';
+    document.getElementById('prev-detail').textContent = raw;
+  }
+}
+
+function handleScan() {
+  const raw = inp.value.trim();
+  if (!raw) return;
+  const e = C[raw];
+  if (!e) { showToast('Άγνωστο barcode: ' + raw, true); inp.value = ''; document.getElementById('preview').style.display = 'none'; return; }
+  const { sku, size, name } = e;
+  if (!data[sku]) {
+    data[sku] = { name: name || '', sizes: {} };
+    // Auto-attach from confirmed store
+    if (_allStoredPhotos[sku]) data[sku].photo = _allStoredPhotos[sku];
+    else tryAttachPendingPhoto(sku); // check pending (unmatched uploads)
+  }
+  data[sku].sizes[size] = (data[sku].sizes[size] || 0) + 1;
+  showToast(sku + (name ? ' · ' + name : '') + ' / Νο ' + size + ' +1');
+  inp.value = ''; document.getElementById('preview').style.display = 'none'; inp.focus();
+  render(); saveAll();
+}
+
+function changeQty(sku, sz, d) {
+  if (!data[sku]) return;
+  data[sku].sizes[sz] = Math.max(0, (data[sku].sizes[sz] || 0) + d);
+  if (!data[sku].sizes[sz]) { delete data[sku].sizes[sz]; if (!Object.keys(data[sku].sizes).length) delete data[sku]; }
+  render(); saveAll();
+}
+function removeSize(sku, sz) {
+  if (data[sku]) { delete data[sku].sizes[sz]; if (!Object.keys(data[sku].sizes).length) delete data[sku]; }
+  render(); saveAll();
+}
+function toggleGroup(sku) { collapsed[sku] = !collapsed[sku]; render(); }
+
+function render() {
+  const skus = Object.keys(data).sort();
+  document.getElementById('empty-state').style.display = skus.length ? 'none' : 'block';
+  document.getElementById('inventory-list').innerHTML = '';
+  let tp = 0, ts = 0;
+  skus.forEach(sku => {
+    const sizes = Object.keys(data[sku].sizes).sort((a, b) => { const n = s => parseFloat(s.replace(/[^0-9.]/g, '')) || 0; return n(a) - n(b); });
+    const gt = sizes.reduce((s, sz) => s + data[sku].sizes[sz], 0);
+    tp += gt; ts += sizes.length;
+    const isOpen = !collapsed[sku];
+    const pn = data[sku].name;
+    const isNew = data[sku].isNew;
+    const card = document.createElement('div');
+    card.className = 'group-card';
+    const noteVal = (data[sku].notes || '').replace(/"/g, '&quot;');
+    const prices = data[sku].prices || {};
+    const allPrices = sizes.map(sz => prices[sz]).filter(p => p != null);
+    const uniquePrices = [...new Set(allPrices.map(p => p.toFixed(2)))];
+    let priceBadgeHtml = '';
+    if (uniquePrices.length === 1) {
+      priceBadgeHtml = `<span class="group-price-badge" onclick="event.stopPropagation()" title="Τιμή από Excel">€${uniquePrices[0]}</span>`;
+    } else if (uniquePrices.length > 1) {
+      const minP = Math.min(...allPrices).toFixed(2);
+      const maxP = Math.max(...allPrices).toFixed(2);
+      priceBadgeHtml = `<span class="group-price-badge" onclick="event.stopPropagation()" title="Διαφορετικές τιμές ανά νούμερο" style="background:#fff3e0;border-color:#fdba74;color:#c2410c">€${minP}–${maxP}</span>`;
+    } else if (data[sku].price != null) {
+      priceBadgeHtml = `<span class="group-price-badge" onclick="event.stopPropagation()" title="Τιμή από Excel">€${Number(data[sku].price).toFixed(2)}</span>`;
+    }
+    const hasPhoto = !!(data[sku].photo);
+    const photosOn = document.getElementById('photos-enabled').checked;
+    card.innerHTML = `<div class="group-header" onclick="toggleGroup('${sku}')">
+      <div class="group-left"><span class="group-title" onclick="event.stopPropagation();copySku('${sku}')" title="Κλικ για αντιγραφή κωδικού" style="cursor:pointer">${sku}${isNew ? '<span class="badge-new">ΝΕΟ</span>' : ''}</span>${pn ? `<span class="group-name">${pn}</span>` : ''}</div>
+      <div class="group-meta">
+        <input class="group-notes" placeholder="Σημείωση…" value="${noteVal}" onclick="event.stopPropagation()" oninput="updateNote('${sku}', this.value)" title="Περιγραφή / σημείωση">
+        ${priceBadgeHtml}
+        ${photosOn ? `<button class="photo-btn${hasPhoto ? ' has-photo' : ''}" onclick="event.stopPropagation();openPhotoPicker('${sku}')" title="${hasPhoto ? 'Αλλαγή φωτογραφίας' : 'Προσθήκη φωτογραφίας'}">📷</button>` : ''}
+        <span class="badge">${sizes.length} νούμερα</span><span class="badge badge-total">${gt} τεμ.</span><span class="chevron ${isOpen ? 'open' : ''}">▾</span>
+      </div>
+    </div>
+    ${isOpen ? `<div style="display:flex;align-items:stretch">
+      ${photosOn && hasPhoto ? `<div style="flex-shrink:0;padding:10px 10px 10px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-right:0.5px solid #e0e0d8;background:#fafaf7">
+        <img class="photo-thumb" src="${data[sku].photo}" alt="${sku}" onclick="openLightbox('${sku}')" title="Κλικ για μεγέθυνση">
+        <button class="photo-remove" onclick="removePhoto('${sku}')">✕ Αφαίρεση</button>
+      </div>` : ''}
+      <div style="flex:1;overflow-x:auto"><table class="size-table"><thead><tr><th style="padding-left:28px">Νούμερο</th><th style="padding-left:20px">Barcode</th><th>Τιμή €</th><th>Τεμάχια</th></tr></thead><tbody>${
+      sizes.map(sz => {
+        const bc = Object.keys(C).find(k => C[k].sku === sku && C[k].size === sz) || '-';
+        const szPrice = prices[sz];
+        const priceCell = szPrice != null ? `<span style="font-size:12px;font-weight:600;color:#1e7e34;font-family:monospace">€${szPrice.toFixed(2)}</span>` : `<span style="color:#ccc;font-size:11px">—</span>`;
+        return `<tr><td style="font-weight:500;padding-left:28px">Νο ${sz}</td><td class="mono" style="padding-left:20px">${bc}</td><td>${priceCell}</td><td><div class="qty-cell">
+          <button class="qty-btn" onclick="changeQty('${sku}','${sz}',-1)">−</button>
+          <span class="qty-val">${data[sku].sizes[sz]}</span>
+          <button class="qty-btn" onclick="changeQty('${sku}','${sz}',1)">+</button>
+          <button class="qty-btn" onclick="removeSize('${sku}','${sz}')" style="margin-left:4px;font-size:11px;color:#c0392b">✕</button>
+        </div></td></tr>`;
+      }).join('')
+    }</tbody></table></div></div>` : ''}`;
+    document.getElementById('inventory-list').appendChild(card);
+  });
+  document.getElementById('s-codes').textContent = skus.length;
+  document.getElementById('s-sizes').textContent = ts;
+  document.getElementById('s-total').textContent = tp;
+  document.getElementById('s-catalog').textContent = Object.keys(C).length;
+  document.getElementById('catalog-count').textContent = Object.keys(C).length;
+}
+
+// ---- IMPORT ----
+function openImport() { goStep(1); document.getElementById('import-modal').className = 'modal-bg open'; }
+function handleDrop(e) {
+  e.preventDefault(); document.getElementById('drop-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+}
+function handleFile(file) {
+  if (!file) return;
+  const r = new FileReader();
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    r.onload = ev => parseCSV(ev.target.result, file.name); r.readAsText(file, 'utf-8');
+  } else {
+    r.onload = ev => parseXLSX(ev.target.result, file.name); r.readAsArrayBuffer(file);
+  }
+}
+function parseXLSX(buf, fname) {
+  try { const wb = XLSX.read(buf, { type: 'array' }); const ws = wb.Sheets[wb.SheetNames[0]]; finishParse(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }), fname); }
+  catch (e) { showToast('Σφάλμα ανάγνωσης αρχείου', true); }
+}
+function parseCSV(text, fname) { finishParse(text.split(/\r?\n/).map(r => r.split(/[,;\t]/)), fname); }
+function finishParse(rows, fname) {
+  if (!rows || rows.length < 2) { showToast('Κενό αρχείο', true); return; }
+  importHeaders = rows[0].map(h => String(h).trim());
+  parsedRows = rows.slice(1).filter(r => r.some(c => String(c).trim() !== ''));
+  document.getElementById('file-info').textContent = fname + ' — ' + parsedRows.length + ' γραμμές, ' + importHeaders.length + ' στήλες';
+  populateColumnSelects(); goStep(2);
+}
+function populateColumnSelects() {
+  ['col-barcode', 'col-qty', 'col-sku', 'col-size', 'col-price'].forEach(id => {
+    const sel = document.getElementById(id);
+    const isBC = id === 'col-barcode';
+    sel.innerHTML = isBC ? '' : '<option value="">— καμία —</option>';
+    if (id === 'col-qty') sel.innerHTML = '<option value="">— καμία (1 τεμ.) —</option>';
+    importHeaders.forEach((h, i) => { sel.innerHTML += `<option value="${i}">${h || 'Στήλη ' + (i + 1)}</option>`; });
+  });
+  importHeaders.forEach((h, i) => {
+    const hl = h.toLowerCase();
+    if (/barcode|ean|upc/.test(hl)) document.getElementById('col-barcode').value = i;
+    else if (/qty|ποσ|τεμ|quantity/.test(hl)) document.getElementById('col-qty').value = i;
+    else if (/sku/.test(hl)) document.getElementById('col-sku').value = i;
+    else if (/size|νούμ|νουμ/.test(hl)) document.getElementById('col-size').value = i;
+    else if (/price|τιμ/.test(hl)) document.getElementById('col-price').value = i;
+  });
+  updatePreview();
+}
+function updatePreview() {
+  const bcCol = parseInt(document.getElementById('col-barcode').value);
+  const qtyCol = document.getElementById('col-qty').value;
+  const skuCol = document.getElementById('col-sku').value;
+  const sizeCol = document.getElementById('col-size').value;
+  const priceCol = document.getElementById('col-price').value;
+  let html = '<thead><tr><th>Barcode</th>';
+  if (qtyCol !== '') html += '<th>Ποσότητα</th>';
+  if (skuCol !== '') html += '<th>SKU</th>';
+  if (sizeCol !== '') html += '<th>Νούμερο</th>';
+  if (priceCol !== '') html += '<th>Τιμή €</th>';
+  html += '<th>Κατάλογος</th></tr></thead><tbody>';
+  parsedRows.slice(0, 5).forEach(row => {
+    const bc = String(row[bcCol] || '').trim().replace(/\.0$/, '');
+    const found = C[bc];
+    html += `<tr><td>${bc}</td>`;
+    if (qtyCol !== '') html += `<td>${String(row[parseInt(qtyCol)] || '').trim()}</td>`;
+    if (skuCol !== '') html += `<td>${String(row[parseInt(skuCol)] || '').trim()}</td>`;
+    if (sizeCol !== '') html += `<td>${String(row[parseInt(sizeCol)] || '').trim()}</td>`;
+    if (priceCol !== '') html += `<td>${String(row[parseInt(priceCol)] || '').trim()}</td>`;
+    html += `<td class="${found ? 'ok' : 'miss'}">${found ? '✓ ' + found.sku + ' / ' + found.size : 'Νέο'}</td></tr>`;
+  });
+  document.getElementById('preview-table').innerHTML = html + '</tbody>';
+}
+function goStep(n) {
+  [1, 2, 3].forEach(i => document.getElementById('step' + i).style.display = i === n ? '' : 'none');
+  document.getElementById('import-step').textContent = ['', 'Βήμα 1 από 3 — Επιλογή αρχείου', 'Βήμα 2 από 3 — Αντιστοίχιση στηλών', 'Βήμα 3 από 3 — Επιβεβαίωση'][n];
+  if (n === 3) buildConfirm();
+}
+function buildConfirm() {
+  const bcCol = parseInt(document.getElementById('col-barcode').value);
+  const qtyCol = document.getElementById('col-qty').value;
+  const skuCol = document.getElementById('col-sku').value;
+  const sizeCol = document.getElementById('col-size').value;
+  const priceCol = document.getElementById('col-price').value;
+  let found = 0, newE = 0, skipped = 0;
+  const rows = parsedRows.map(row => {
+    const bc = String(row[bcCol] || '').trim().replace(/\.0$/, '');
+    const qty = qtyCol !== '' ? parseInt(row[parseInt(qtyCol)]) || 1 : 1;
+    const skuOv = skuCol !== '' ? String(row[parseInt(skuCol)] || '').trim() : '';
+    const sizeOv = sizeCol !== '' ? String(row[parseInt(sizeCol)] || '').trim() : '';
+    const priceRaw = priceCol !== '' ? parseFloat(String(row[parseInt(priceCol)] || '').replace(',', '.')) : null;
+    const price = (priceRaw != null && !isNaN(priceRaw)) ? priceRaw : null;
+    if (!bc) { skipped++; return null; }
+    const ex = C[bc];
+    if (ex) { found++; return { bc, sku: ex.sku, size: ex.size, name: ex.name || '', qty, price, isNew: false }; }
+    if (skuOv && sizeOv) { newE++; return { bc, sku: skuOv, size: sizeOv, name: '', qty, price, isNew: true }; }
+    skipped++; return null;
+  }).filter(Boolean);
+  document.getElementById('import-summary').textContent = 'Βρέθηκαν: ' + found + ' | Νέα barcodes: ' + newE + ' | Παρακαμφθέντα: ' + skipped;
+  let html = '<thead><tr><th>Barcode</th><th>SKU</th><th>Νούμερο</th><th>Ποσότητα</th><th>Τιμή €</th><th>Κατάσταση</th></tr></thead><tbody>';
+  rows.slice(0, 50).forEach(r => {
+    const priceDisp = r.price != null ? '€' + r.price.toFixed(2) : '—';
+    html += `<tr><td class="mono">${r.bc}</td><td>${r.sku}</td><td>${r.size}</td><td>${r.qty}</td><td>${priceDisp}</td><td class="${r.isNew ? 'miss' : 'ok'}">${r.isNew ? 'Νέο' : '✓'}</td></tr>`;
+  });
+  if (rows.length > 50) html += `<tr><td colspan="6" style="color:#888;font-size:11px">...και ${rows.length - 50} ακόμα γραμμές</td></tr>`;
+  document.getElementById('confirm-table').innerHTML = html + '</tbody>';
+  document.getElementById('confirm-table')._rows = rows;
+}
+function doImport() {
+  const rows = document.getElementById('confirm-table')._rows || [];
+  let added = 0, addedNew = 0;
+  rows.forEach(r => {
+    if (r.isNew) { C[r.bc] = { sku: r.sku, size: r.size, name: '' }; addedNew++; }
+    if (!data[r.sku]) {
+      data[r.sku] = { name: r.name, sizes: {}, isNew: r.isNew };
+      if (_allStoredPhotos[r.sku]) data[r.sku].photo = _allStoredPhotos[r.sku];
+      else tryAttachPendingPhoto(r.sku);
+    }
+    data[r.sku].sizes[r.size] = (data[r.sku].sizes[r.size] || 0) + r.qty;
+    if (r.price != null) {
+      if (!data[r.sku].prices) data[r.sku].prices = {};
+      data[r.sku].prices[r.size] = r.price;
+      data[r.sku].price = r.price; // legacy fallback
+    }
+    added++;
+  });
+  closeModal('import-modal'); render(); saveAll();
+  updateCatalogExtraCount();
+  showToast('Εισήχθησαν ' + added + ' εγγραφές' + (addedNew ? ' (+' + addedNew + ' νέα barcodes)' : ''));
+}
+
+// ---- CSV EXPORT ----
+function buildCSV() {
+  const skus = Object.keys(data).sort();
+  if (!skus.length) return null;
+  let csv = 'SKU,Προϊόν,Νούμερο,Barcode,Τεμάχια,Τιμή,Σημειώσεις\r\n';
+  skus.forEach(sku => {
+    Object.keys(data[sku].sizes).sort().forEach(sz => {
+      const bc = Object.keys(C).find(k => C[k].sku === sku && C[k].size === sz) || '';
+      const note = data[sku].notes || '';
+      const prices = data[sku].prices || {};
+      const price = prices[sz] != null ? Number(prices[sz]).toFixed(2) : (data[sku].price != null ? Number(data[sku].price).toFixed(2) : '');
+      csv += `${sku},"${data[sku].name || ''}",${sz},${bc},${data[sku].sizes[sz]},${price},"${note}"\r\n`;
+    });
+  });
+  return csv;
+}
+function exportCSV() {
+  const csv = buildCSV();
+  if (!csv) { showToast('Δεν υπάρχουν δεδομένα', true); return; }
+  document.getElementById('csv-area').value = csv;
+  document.getElementById('csv-modal').className = 'modal-bg open';
+  setTimeout(() => document.getElementById('csv-area').select(), 100);
+}
+function downloadCSV() {
+  const csv = buildCSV(); if (!csv) return;
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inventory_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+function copyCSV() {
+  const ta = document.getElementById('csv-area'); ta.select();
+  try { document.execCommand('copy'); showToast('Αντιγράφηκε!'); } catch (e) { showToast('Ctrl+C για αντιγραφή', true); }
+}
+
+// ---- EXCEL EXPORT (τελική παραλαβή) ----
+function exportExcel() {
+  const skus = Object.keys(data).sort();
+  if (!skus.length) { showToast('Δεν υπάρχουν δεδομένα', true); return; }
+  const title = document.getElementById('receipt-title').value.trim();
+  const rows = [];
+  let totalPcs = 0;
+  skus.forEach(sku => {
+    const sizes = Object.keys(data[sku].sizes).sort((a, b) => { const n = s => parseFloat(s.replace(/[^0-9.]/g, '')) || 0; return n(a) - n(b); });
+    const prices = data[sku].prices || {};
+    sizes.forEach(sz => {
+      const bc = Object.keys(C).find(k => C[k].sku === sku && C[k].size === sz) || '';
+      const price = prices[sz] != null ? Number(prices[sz]) : (data[sku].price != null ? Number(data[sku].price) : '');
+      const qty = data[sku].sizes[sz];
+      totalPcs += qty;
+      rows.push({
+        'SKU': sku,
+        'Προϊόν': data[sku].name || '',
+        'Νούμερο': sz,
+        'Barcode': bc,
+        'Τεμάχια': qty,
+        'Τιμή €': price,
+        'Σύνολο €': price !== '' ? +(price * qty).toFixed(2) : '',
+        'Σημειώσεις': data[sku].notes || ''
+      });
+    });
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 10 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Παραλαβή');
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const fname = 'Παραλαβη_' + (title ? title.replace(/[\\/:*?"<>|]/g, '_') + '_' : '') + dateStr + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  showToast('Excel εξήχθη (' + skus.length + ' SKU · ' + totalPcs + ' τεμ.)');
+}
+
+// ---- BACKUP ----
+function exportJSON() {
+  const payload = { version: 1, date: new Date().toISOString(), data, catalog_extra: {} };
+  Object.keys(C).forEach(k => { if (!BASE_C[k]) payload.catalog_extra[k] = C[k]; });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inventory_backup_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  showToast('Backup αποθηκεύτηκε');
+}
+function importBackup() { document.getElementById('backup-input').click(); }
+function loadBackupFile(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const p = JSON.parse(ev.target.result);
+      if (p.data) { data = p.data; }
+      if (p.catalog_extra) Object.assign(C, p.catalog_extra);
+      render(); saveAll();
+      showToast('Backup φορτώθηκε επιτυχώς!');
+    } catch (e) { showToast('Σφάλμα φόρτωσης backup', true); }
+  };
+  r.readAsText(file);
+}
+
+function closeModal(id) { document.getElementById(id).className = 'modal-bg'; }
+document.querySelectorAll('.modal-bg').forEach(m => m.addEventListener('click', function(e) { if (e.target === this) closeModal(this.id); }));
+function clearAll() {
+  if (!Object.keys(data).length) return;
+  if (confirm('Διαγραφή όλων των δεδομένων;')) { data = {}; render(); saveAll(); }
+}
+
+let tt;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast' + (isErr ? ' err' : '') + ' show';
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ---- PDF EXPORT ----
+function exportPDF() {
+  if (!Object.keys(data).length) { showToast('Δεν υπάρχουν δεδομένα', true); return; }
+  const title = document.getElementById('receipt-title').value.trim();
+  const photosOn = document.getElementById('photos-enabled').checked;
+  exportPDFData(data, title, '', photosOn);
+}
+
+function exportPDFData(pdfData, receiptTitle, receiptDate, photosOn) {
+  const skus = Object.keys(pdfData).sort();
+  if (!skus.length) { showToast('Δεν υπάρχουν δεδομένα', true); return; }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('el-GR') + ' ' + now.toLocaleTimeString('el-GR', {hour:'2-digit', minute:'2-digit'});
+  const displayDate = receiptDate || dateStr;
+
+  let totalSizes = 0, totalPcs = 0;
+  skus.forEach(sku => {
+    Object.keys(pdfData[sku].sizes).forEach(sz => { totalSizes++; totalPcs += pdfData[sku].sizes[sz]; });
+  });
+
+  // Build SKU group HTML — horizontal chips: Νο(qty)
+  let groupsHTML = '';
+  skus.forEach(sku => {
+    const sizes = Object.keys(pdfData[sku].sizes).sort((a,b) => {
+      const n = s => parseFloat(s.replace(/[^0-9.]/g,'')) || 0; return n(a)-n(b);
+    });
+    const gt = sizes.reduce((s,sz) => s + pdfData[sku].sizes[sz], 0);
+    const pn = pdfData[sku].name ? `<span class="pname">${pdfData[sku].name}</span>` : '';
+    const noteStr = pdfData[sku].notes ? `<span class="pnote">${pdfData[sku].notes}</span>` : '';
+    const prices = pdfData[sku].prices || {};
+    const allPrices = sizes.map(sz => prices[sz]).filter(p => p != null);
+    const uniquePrices = [...new Set(allPrices.map(p => p.toFixed(2)))];
+    let priceStr = '';
+    if (uniquePrices.length === 1) {
+      priceStr = `<span class="pprice">€${uniquePrices[0]}</span>`;
+    } else if (uniquePrices.length > 1) {
+      const minP = Math.min(...allPrices).toFixed(2);
+      const maxP = Math.max(...allPrices).toFixed(2);
+      priceStr = `<span class="pprice" style="background:#fff3e0;color:#c2410c">€${minP}–${maxP}</span>`;
+    } else if (pdfData[sku].price != null) {
+      priceStr = `<span class="pprice">€${Number(pdfData[sku].price).toFixed(2)}</span>`;
+    }
+    const chips = sizes.map((sz, idx) => {
+      const q = pdfData[sku].sizes[sz];
+      const szPrice = prices[sz];
+      const prevPrice = idx > 0 ? prices[sizes[idx - 1]] : undefined;
+      // Show price label only at the first occurrence or when price changes
+      const showPrice = szPrice != null && (idx === 0 ? true : szPrice !== prevPrice);
+      const pricePart = showPrice ? `<span class="chipp">€${szPrice.toFixed(2)}</span>` : (szPrice != null ? '<span class="chipp-spacer"></span>' : '');
+      return `<span class="chip${q > 1 ? ' multi' : ''}">${pricePart}<span class="chiprow"><span class="chipnum">${sz}</span><span class="chipq">(${q})</span></span></span>`;
+    }).join('');
+    const photoStr = (photosOn && pdfData[sku].photo) ? `<div class="gbody">
+        <div class="gphoto"><img src="${pdfData[sku].photo}" alt="${sku}"></div>
+        <div class="chips">${chips}</div>
+      </div>` : `<div class="chips">${chips}</div>`;
+    groupsHTML += `
+      <div class="group">
+        <div class="ghead">
+          <span class="gsku">${sku}</span>${pn}${noteStr}${priceStr}
+          <span class="gbadge blue">${sizes.length} νούμερα</span>
+          <span class="gbadge green">${gt} τεμ.</span>
+        </div>
+        ${photoStr}
+      </div>`;
+  });
+
+  const titleLine = receiptTitle ? `<span class="receipt-title-pdf">${receiptTitle}</span>` : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Δελτίο Παραλαβής${receiptTitle ? ' — ' + receiptTitle : ''}</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #1a1a1a; background: #fff; }
+
+  .header { background: #1a1a1a; color: #fff; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-radius: 4px; }
+  .header-left { display: flex; flex-direction: column; gap: 3px; }
+  .header h1 { font-size: 14pt; font-weight: bold; letter-spacing: 0.5px; }
+  .receipt-title-pdf { font-size: 11pt; color: #ccc; font-weight: 500; }
+  .header .dt { font-size: 8pt; color: #ccc; text-align: right; }
+
+  .summary { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 14px; }
+  .sbox { background: #f5f5f0; border: 0.5px solid #ddd; border-radius: 4px; padding: 6px 8px; text-align: center; }
+  .sbox .slabel { font-size: 8pt; color: #888; margin-bottom: 2px; }
+  .sbox .sval { font-size: 17pt; font-weight: bold; color: #1a1a1a; }
+
+  .group { margin-bottom: 8px; page-break-inside: avoid; border: 0.5px solid #ddd; border-radius: 4px; overflow: hidden; }
+  .ghead { display: flex; align-items: center; gap: 8px; background: #f0f0eb; padding: 6px 10px; border-bottom: 0.5px solid #ddd; }
+  .gsku { font-size: 12pt; font-weight: bold; color: #1a1a1a; }
+  .pname { font-size: 9pt; color: #777; margin-left: 2px; }
+  .pnote { font-size: 9pt; color: #1a56db; margin-left: 6px; font-style: italic; }
+  .pprice { font-size: 10pt; font-weight: bold; color: #1e7e34; margin-left: 8px; background: #d4edda; padding: 1px 7px; border-radius: 10px; }
+  .gbadge { font-size: 8pt; font-weight: bold; padding: 2px 7px; border-radius: 20px; margin-left: auto; }
+  .gbadge.blue { background: #dce8fe; color: #1a56db; margin-left: auto; }
+  .gbadge.green { background: #d4edda; color: #1e7e34; margin-left: 4px; }
+
+  .chips { padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+  .chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; background: #f5f5f0; border: 0.5px solid #ddd; border-radius: 4px; padding: 4px 10px 5px; min-width: 48pt; }
+  .chip.multi { background: #f5f5f0; border-color: #ddd; }
+  .chiprow { display: flex; align-items: baseline; gap: 2px; }
+  .chipnum { font-size: 12pt; font-weight: bold; color: #1a1a1a; line-height: 1.2; }
+  .chipq { font-size: 9pt; font-weight: normal; color: #555; }
+  .chipp { font-size: 8pt; font-weight: bold; color: #1e7e34; margin-bottom: 2px; line-height: 1.2; }
+  .chipp-spacer { display: block; height: 10pt; margin-bottom: 2px; }
+
+  .gbody { display: flex; align-items: center; }
+  .gphoto { flex-shrink: 0; padding: 6px 8px; border-right: 0.5px solid #eee; background: #fafaf7; display: flex; align-items: center; justify-content: center; }
+  .gphoto img { width: 150px; height: 150px; object-fit: cover; border-radius: 4px; border: 0.5px solid #ddd; display: block; }
+  .gbody .chips { flex: 1; align-items: center; }
+
+  .footer { position: fixed; bottom: 0; left: 0; right: 0; border-top: 0.5px solid #ddd; padding: 4px 14px; font-size: 7pt; color: #aaa; display: flex; justify-content: space-between; background: #fff; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>ΔΕΛΤΙΟ ΠΑΡΑΛΑΒΗΣ</h1>
+      ${titleLine}
+    </div>
+    <span class="dt">${displayDate}</span>
+  </div>
+  <div class="summary">
+    <div class="sbox"><div class="slabel">Catalog barcodes</div><div class="sval">${Object.keys(C).length}</div></div>
+    <div class="sbox"><div class="slabel">SKU σκαναρισμένα</div><div class="sval">${skus.length}</div></div>
+    <div class="sbox"><div class="slabel">Νούμερα</div><div class="sval">${totalSizes}</div></div>
+    <div class="sbox"><div class="slabel">Σύνολο τεμάχια</div><div class="sval">${totalPcs}</div></div>
+  </div>
+  ${groupsHTML}
+  <div class="footer">
+    <span>Inventory Scanner${receiptTitle ? ' · ' + receiptTitle : ''}</span>
+    <span>${displayDate}</span>
+  </div>
+  <script>
+    window.onload = function() {
+      window.print();
+    };
+  <\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { showToast('Επιτρέψτε τα pop-ups για PDF', true); return; }
+  win.document.write(html);
+  win.document.close();
+  showToast('Άνοιξε παράθυρο εκτύπωσης — επιλέξτε "Αποθήκευση ως PDF"');
+}
+
+function updateNote(sku, val) {
+  if (!data[sku]) return;
+  data[sku].notes = val;
+  saveAll();
+}
+
+// ---- TABS ----
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  if (tab === 'scan') {
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    document.getElementById('tab-scan').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('tab-saved').classList.add('active');
+    renderSavedList();
+  }
+}
+
+// ---- SAVE RECEIPT ----
+const SAVED_RECEIPTS_KEY = 'inv_saved_receipts';
+function getSavedReceipts() {
+  return idbKvGet(SAVED_RECEIPTS_KEY).then(v => v || []).catch(() => []);
+}
+function setSavedReceipts(arr) { return idbKvSet(SAVED_RECEIPTS_KEY, arr); }
+
+function openSaveReceipt() {
+  if (!Object.keys(data).length) { showToast('Δεν υπάρχουν δεδομένα για αποθήκευση', true); return; }
+  const titleInput = document.getElementById('sr-title');
+  const dateInput = document.getElementById('sr-date');
+  titleInput.value = document.getElementById('receipt-title').value || '';
+  dateInput.value = new Date().toISOString().slice(0, 10);
+  const skuCount = Object.keys(data).length;
+  const totalPcs = Object.values(data).reduce((s,v)=>s+Object.values(v.sizes).reduce((a,b)=>a+b,0),0);
+  document.getElementById('sr-hint').textContent = skuCount + ' SKU · ' + totalPcs + ' τεμάχια';
+  document.getElementById('save-receipt-modal').className = 'modal-bg open';
+  setTimeout(() => titleInput.focus(), 100);
+}
+
+function doSaveReceipt() {
+  const title = document.getElementById('sr-title').value.trim();
+  const date = document.getElementById('sr-date').value;
+  if (!title) { document.getElementById('sr-title').focus(); showToast('Εισάγετε τίτλο', true); return; }
+  getSavedReceipts().then(receipts => {
+    const id = 'r_' + Date.now();
+    receipts.unshift({ id, title, date, data: JSON.parse(JSON.stringify(data)), savedAt: new Date().toISOString() });
+    return setSavedReceipts(receipts);
+  }).then(() => {
+    document.getElementById('receipt-title').value = title;
+    closeModal('save-receipt-modal');
+    showToast('Παραλαβή "' + title + '" αποθηκεύτηκε!');
+    updateSavedBadge();
+  });
+}
+
+function updateSavedBadge() {
+  getSavedReceipts().then(receipts => {
+    const count = receipts.length;
+    document.querySelectorAll('.tab-btn')[1].textContent = '📂 Αποθηκευμένες Παραλαβές' + (count ? ' (' + count + ')' : '');
+  });
+}
+
+function renderSavedList() {
+  getSavedReceipts().then(receipts => {
+  const list = document.getElementById('saved-list');
+  const empty = document.getElementById('saved-empty');
+  list.innerHTML = '';
+  if (!receipts.length) { empty.style.display = 'block'; updateSavedBadge(); return; }
+  empty.style.display = 'none';
+  updateSavedBadge();
+  receipts.forEach(r => {
+    const skuCount = Object.keys(r.data).length;
+    const totalPcs = Object.values(r.data).reduce((s,v)=>s+Object.values(v.sizes).reduce((a,b)=>a+b,0),0);
+    const dateDisp = r.date ? new Date(r.date + 'T00:00:00').toLocaleDateString('el-GR') : '';
+    const savedStr = new Date(r.savedAt).toLocaleString('el-GR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const item = document.createElement('div');
+    item.className = 'saved-item';
+    item.innerHTML = `
+      <div class="saved-item-info">
+        <div class="saved-item-title">${r.title}</div>
+        <div class="saved-item-meta">${dateDisp ? dateDisp + ' · ' : ''}${skuCount} SKU · ${totalPcs} τεμ. · Αποθ. ${savedStr}</div>
+      </div>
+      <div class="saved-item-actions">
+        <button class="btn" style="font-size:12px" onclick="loadReceipt('${r.id}')">✏️ Άνοιγμα</button>
+        <button class="btn" style="font-size:12px;background:#fff3e0;border-color:#ffb74d;color:#e65100" onclick="exportPDFFromSaved('${r.id}')">📄 PDF</button>
+        <button class="btn" style="font-size:12px;color:#c0392b" onclick="deleteReceipt('${r.id}')">✕</button>
+      </div>`;
+    list.appendChild(item);
+  });
+  });
+}
+
+function loadReceipt(id) {
+  getSavedReceipts().then(receipts => {
+    const r = receipts.find(x => x.id === id);
+    if (!r) return;
+    if (Object.keys(data).length && !confirm('Η τρέχουσα παραλαβή θα αντικατασταθεί. Συνέχεια;')) return;
+    data = JSON.parse(JSON.stringify(r.data));
+    // Re-attach photos from IndexedDB (they aren't stored in receipt to save space)
+    Object.keys(data).forEach(sku => {
+      if (_allStoredPhotos[sku]) data[sku].photo = _allStoredPhotos[sku];
+    });
+    document.getElementById('receipt-title').value = r.title;
+    saveAll();
+    render();
+    switchTab('scan');
+    showToast('Φορτώθηκε: "' + r.title + '"');
+  });
+}
+
+function deleteReceipt(id) {
+  if (!confirm('Διαγραφή αυτής της παραλαβής;')) return;
+  getSavedReceipts().then(receipts => setSavedReceipts(receipts.filter(x => x.id !== id))).then(() => {
+    renderSavedList();
+    showToast('Διαγράφηκε');
+  });
+}
+
+function deleteAllSaved() {
+  getSavedReceipts().then(receipts => {
+    if (!receipts.length) return;
+    if (!confirm('Διαγραφή ΟΛΩΝ των αποθηκευμένων παραλαβών;')) return;
+    setSavedReceipts([]).then(() => {
+      renderSavedList();
+      showToast('Διαγράφηκαν όλες');
+    });
+  });
+}
+
+function exportPDFFromSaved(id) {
+  getSavedReceipts().then(receipts => {
+    const r = receipts.find(x => x.id === id);
+    if (!r) return;
+    const dateDisp = r.date ? new Date(r.date + 'T00:00:00').toLocaleDateString('el-GR') : '';
+    const photosOn = document.getElementById('photos-enabled').checked;
+    exportPDFData(r.data, r.title, dateDisp, photosOn);
+  });
+}
+
+// ---- PHOTOS (IndexedDB — μόνιμη αποθήκευση, χωρίς όριο 5MB) ----
+let _currentPhotoSku = null;
+const IDB_NAME = 'InventoryPhotosDB';
+const IDB_STORE = 'photos';
+let _idb = null;
+
+const IDB_PENDING_STORE = 'pending_photos';
+const IDB_KV_STORE = 'kv';
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    if (_idb) { resolve(_idb); return; }
+    const req = indexedDB.open(IDB_NAME, 3);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'sku' });
+      }
+      if (!db.objectStoreNames.contains(IDB_PENDING_STORE)) {
+        db.createObjectStore(IDB_PENDING_STORE, { keyPath: 'nameNorm' });
+      }
+      if (!db.objectStoreNames.contains(IDB_KV_STORE)) {
+        db.createObjectStore(IDB_KV_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ---- Generic key/value store (replaces localStorage — inventory data, catalog extras, saved receipts, settings) ----
+function idbKvGet(key) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_KV_STORE, 'readonly');
+    const req = tx.objectStore(IDB_KV_STORE).get(key);
+    req.onsuccess = () => resolve(req.result ? req.result.value : undefined);
+    req.onerror = () => reject(req.error);
+  }));
+}
+function idbKvSet(key, value) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_KV_STORE, 'readwrite');
+    tx.objectStore(IDB_KV_STORE).put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+// One-time migration: pull any legacy localStorage values into IndexedDB, then stop touching localStorage.
+function migrateLocalStorageToIDB() {
+  const legacyKeys = [DATA_KEY, 'inv_catalog_extra', 'inv_saved_receipts', 'inv_photos_enabled'];
+  const jobs = legacyKeys.map(k => {
+    const raw = localStorage.getItem(k);
+    if (raw == null) return Promise.resolve();
+    let val;
+    try { val = (k === 'inv_photos_enabled') ? raw : JSON.parse(raw); } catch(e) { return Promise.resolve(); }
+    return idbKvGet(k).then(existing => {
+      if (existing !== undefined) return; // already migrated, don't overwrite
+      return idbKvSet(k, val);
+    }).then(() => localStorage.removeItem(k));
+  });
+  return Promise.all(jobs).catch(() => {});
+}
+
+// Save photo without SKU match — store by normalized filename for later matching
+function idbSetPendingPhoto(nameNorm, originalName, dataUrl) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_PENDING_STORE, 'readwrite');
+    tx.objectStore(IDB_PENDING_STORE).put({ nameNorm, originalName, dataUrl });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbGetAllPending() {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_PENDING_STORE, 'readonly');
+    const req = tx.objectStore(IDB_PENDING_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function idbDeletePending(nameNorm) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_PENDING_STORE, 'readwrite');
+    tx.objectStore(IDB_PENDING_STORE).delete(nameNorm);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+// Normalize helper (shared)
+function normStr(s) { return s.toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+// Try to match a SKU string against pending photos — returns best match or null
+function findPendingPhotoForSku(sku) {
+  const skuNorm = normStr(sku);
+  return idbGetAllPending().then(pending => {
+    // 1. Exact
+    let hit = pending.find(p => p.nameNorm === skuNorm);
+    if (hit) return hit;
+    // 2. Contains
+    hit = pending.find(p => p.nameNorm.includes(skuNorm) || skuNorm.includes(p.nameNorm));
+    if (hit) return hit;
+    // 3. Fuzzy levenshtein ≤ 3, similarity ≥ 80%
+    function lev(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array.from({length: m+1}, (_,i) => Array.from({length: n+1}, (_,j) => i===0?j:j===0?i:0));
+      for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
+        dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+      return dp[m][n];
+    }
+    let best = null, bestDist = Infinity;
+    for (const p of pending) {
+      const maxLen = Math.max(skuNorm.length, p.nameNorm.length);
+      const d = lev(skuNorm, p.nameNorm);
+      if (d < bestDist && d <= 3 && (maxLen-d)/maxLen >= 0.80) { bestDist = d; best = p; }
+    }
+    return best;
+  });
+}
+
+// When a new SKU appears, check pending photos and auto-attach
+function tryAttachPendingPhoto(sku) {
+  findPendingPhotoForSku(sku).then(hit => {
+    if (!hit) return;
+    if (data[sku]) data[sku].photo = hit.dataUrl;
+    _allStoredPhotos[sku] = hit.dataUrl;
+    idbSetPhoto(sku, hit.dataUrl)
+      .then(() => idbDeletePending(hit.nameNorm))
+      .then(() => { render(); showToast('📷 Φωτογραφία συνδέθηκε αυτόματα: ' + sku); })
+      .catch(() => {});
+  }).catch(() => {});
+}
+
+function idbGetPhoto(sku) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(sku);
+    req.onsuccess = () => resolve(req.result ? req.result.dataUrl : null);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function idbSetPhoto(sku, dataUrl) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put({ sku, dataUrl });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbDeletePhoto(sku) {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(sku);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+function idbGetAllPhotos() {
+  return openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => {
+      const map = {};
+      (req.result || []).forEach(r => { map[r.sku] = r.dataUrl; });
+      resolve(map);
+    };
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+// Also store globally so new SKUs added later can pick up their photo
+let _allStoredPhotos = {};
+
+function togglePhotosFeature(enabled) {
+  idbKvSet('inv_photos_enabled', enabled ? '1' : '0');
+  render();
+}
+
+// ---- APP INIT (everything now lives in IndexedDB, no localStorage) ----
+async function initApp() {
+  await migrateLocalStorageToIDB();
+
+  // Catalog extras + inventory data
+  try {
+    const extra = await idbKvGet('inv_catalog_extra');
+    if (extra) Object.assign(C, extra);
+  } catch(e) {}
+  try {
+    const saved = await idbKvGet(DATA_KEY);
+    if (saved) data = saved;
+  } catch(e) {}
+
+  render();
+  updateSavedBadge();
+
+  // Photos
+  try {
+    const photos = await idbGetAllPhotos();
+    _allStoredPhotos = photos;
+    const count = Object.keys(photos).length;
+    if (count) {
+      let changed = false;
+      Object.keys(data).forEach(sku => {
+        if (photos[sku] && !data[sku].photo) { data[sku].photo = photos[sku]; changed = true; }
+      });
+      if (changed) render();
+      showToast('📷 ' + count + ' φωτογραφίες από μόνιμη αποθήκη');
+    }
+  } catch(e) {}
+
+  // Photos-enabled toggle
+  try {
+    const savedToggle = await idbKvGet('inv_photos_enabled');
+    if (savedToggle === '1') {
+      const cb = document.getElementById('photos-enabled');
+      if (cb) { cb.checked = true; render(); }
+    }
+  } catch(e) {}
+
+  updatePhotoStoreCount();
+}
+
+initApp();
+
+function openPhotoPicker(sku) {
+  _currentPhotoSku = sku;
+  const inp = document.getElementById('photo-input');
+  inp.value = '';
+  inp.click();
+}
+
+function handlePhotoUpload(file) {
+  if (!file || !_currentPhotoSku) return;
+  const sku = _currentPhotoSku;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const MAX = 600;
+      const scale = Math.min(1, MAX / img.width, MAX / img.height);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+      if (data[sku]) data[sku].photo = dataUrl;
+      idbSetPhoto(sku, dataUrl).then(() => {
+        saveAll(); render();
+        showToast('Φωτογραφία αποθηκεύτηκε μόνιμα για ' + sku);
+      }).catch(() => showToast('Σφάλμα αποθήκευσης φωτογραφίας!', true));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto(sku) {
+  if (data[sku]) delete data[sku].photo;
+  idbDeletePhoto(sku).catch(() => {});
+  render();
+  showToast('Φωτογραφία αφαιρέθηκε');
+}
+
+// ---- BULK PHOTO IMPORT ----
+function openBulkPhotoImport() {
+  document.getElementById('bulk-photo-results').style.display = 'none';
+  document.getElementById('bulk-photo-modal').className = 'modal-bg open';
+}
+
+function handleBulkPhotoDrop(e) {
+  e.preventDefault();
+  document.getElementById('bulk-drop-zone').classList.remove('drag');
+  handleBulkPhotoUpload(e.dataTransfer.files);
+}
+
+function handleBulkPhotoUpload(files) {
+  if (!files || !files.length) return;
+  const fileArr = Array.from(files);
+  let matched = [], unmatched = [], done = 0;
+
+  // Normalize: uppercase, strip all non-alphanumeric
+  function norm(s) { return s.toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+  // Levenshtein distance
+  function lev(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return dp[m][n];
+  }
+
+  // Find best SKU match: search both scanned data AND full catalog
+  const skuKeys = [...new Set([...Object.keys(data), ...Object.values(C).map(v => v.sku)])];
+  const skuNorms = skuKeys.map(norm);
+
+  function findBestSku(filename) {
+    const nameNorm = norm(filename.replace(/\.[^.]+$/, ''));
+    // 1. Exact match
+    const exactIdx = skuNorms.indexOf(nameNorm);
+    if (exactIdx !== -1) return { sku: skuKeys[exactIdx], exact: true };
+    // 2. Contains match (SKU is substring of filename or vice versa)
+    for (let i = 0; i < skuNorms.length; i++) {
+      if (nameNorm.includes(skuNorms[i]) || skuNorms[i].includes(nameNorm)) {
+        return { sku: skuKeys[i], exact: false, hint: 'περιέχει' };
+      }
+    }
+    // 3. Fuzzy: find closest SKU with distance ≤ 3 and similarity ≥ 80%
+    let bestSku = null, bestDist = Infinity;
+    for (let i = 0; i < skuNorms.length; i++) {
+      const maxLen = Math.max(nameNorm.length, skuNorms[i].length);
+      const d = lev(nameNorm, skuNorms[i]);
+      const similarity = (maxLen - d) / maxLen;
+      if (d < bestDist && d <= 3 && similarity >= 0.80) {
+        bestDist = d; bestSku = { sku: skuKeys[i], exact: false, hint: d + ' διαφορές' };
+      }
+    }
+    return bestSku;
+  }
+
+  function compressImage(file, cb) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const MAX = 600;
+        const scale = Math.min(1, MAX / img.width, MAX / img.height);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        cb(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function processOne(file, cb) {
+    const match = findBestSku(file.name);
+    if (!match) {
+      // No SKU match yet — save as pending with normalized filename key
+      compressImage(file, dataUrl => {
+        const nameNorm = normStr(file.name.replace(/\.[^.]+$/, ''));
+        idbSetPendingPhoto(nameNorm, file.name, dataUrl)
+          .then(() => { unmatched.push(file.name); cb(); })
+          .catch(() => { unmatched.push(file.name); cb(); });
+      });
+      return;
+    }
+    const realSku = match.sku;
+    compressImage(file, dataUrl => {
+      if (data[realSku]) data[realSku].photo = dataUrl;
+      _allStoredPhotos[realSku] = dataUrl;
+      idbSetPhoto(realSku, dataUrl).catch(() => {});
+      matched.push({ file: file.name, sku: realSku, exact: match.exact, hint: match.hint });
+      cb();
+    });
+  }
+
+  function next(i) {
+    if (i >= fileArr.length) {
+      saveAll(); render();
+      // Show results
+      const res = document.getElementById('bulk-photo-results');
+      let html = '';
+      if (matched.length) {
+        html += `<div style="background:#e6f4ea;border:0.5px solid #a8d5b5;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:600;color:#1e7e34;margin-bottom:6px">✓ Αντιστοιχίστηκαν ${matched.length} φωτογραφίες</div>
+          <div style="font-size:11px;color:#555;display:flex;flex-direction:column;gap:2px">
+            ${matched.map(m => `<span><strong>${m.sku}</strong> ← ${m.file}${!m.exact && m.hint ? ` <span style="color:#b45309;font-size:10px">(~${m.hint})</span>` : ''}</span>`).join('')}
+          </div>
+        </div>`;
+      }
+      if (unmatched.length) {
+        html += `<div style="background:#fff7ed;border:0.5px solid #fdba74;border-radius:8px;padding:10px 12px">
+          <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:4px">⏳ ${unmatched.length} φωτογραφίες αποθηκεύτηκαν ως εκκρεμείς</div>
+          <div style="font-size:11px;color:#78350f;margin-bottom:6px">Θα συνδεθούν αυτόματα όταν σκαναριστεί το αντίστοιχο barcode</div>
+          <div style="font-size:11px;color:#555;display:flex;flex-direction:column;gap:2px">
+            ${unmatched.map(f => `<span>📄 ${f}</span>`).join('')}
+          </div>
+        </div>`;
+      }
+      res.innerHTML = html;
+      res.style.display = 'block';
+      showToast(matched.length + ' αντιστοιχίστηκαν' + (unmatched.length ? ', ' + unmatched.length + ' εκκρεμείς' : ''));
+      return;
+    }
+    processOne(fileArr[i], () => next(i + 1));
+  }
+  next(0);
+}
+
+// ---- MANAGE PHOTOS ----
+// ---- MANAGE CATALOG (imported Excel barcodes) ----
+function getCatalogExtra() {
+  const extra = {};
+  Object.keys(C).forEach(k => { if (!BASE_C[k]) extra[k] = C[k]; });
+  return extra;
+}
+
+function updateCatalogExtraCount() {
+  const count = Object.keys(getCatalogExtra()).length;
+  const el = document.getElementById('catalog-extra-count');
+  if (el) el.textContent = count;
+}
+
+function openManageCatalog() {
+  const extra = getCatalogExtra();
+  const el = document.getElementById('manage-catalog-body');
+
+  // Group barcodes by SKU
+  const bySkU = {};
+  Object.entries(extra).forEach(([bc, entry]) => {
+    if (!bySkU[entry.sku]) bySkU[entry.sku] = { name: entry.name || '', barcodes: [] };
+    bySkU[entry.sku].barcodes.push({ bc, size: entry.size });
+  });
+
+  const skus = Object.keys(bySkU).sort();
+  if (!skus.length) {
+    el.innerHTML = '<div style="text-align:center;padding:1.5rem;color:#888">Δεν υπάρχουν barcodes από Excel.<br>Εισάγετε παραγγελία για να εμφανιστούν εδώ.</div>';
+  } else {
+    el.innerHTML = skus.map(sku => {
+      const g = bySkU[sku];
+      const bcList = g.barcodes.sort((a,b) => a.size.localeCompare(b.size))
+        .map(b => `<span style="font-size:10px;font-family:monospace;background:#f5f5f0;border:0.5px solid #ddd;border-radius:4px;padding:1px 6px;white-space:nowrap">Νο${b.size}: ${b.bc}</span>`).join(' ');
+      const inData = !!data[sku];
+      return `<div class="catalog-item">
+        <div class="catalog-item-info">
+          <div class="catalog-item-sku">${sku}${g.name ? ' <span style="font-size:11px;color:#888;font-weight:400">· ' + g.name + '</span>' : ''}${inData ? ' <span style="font-size:10px;background:#e6f4ea;color:#1e7e34;border-radius:10px;padding:1px 6px">σκαναρισμένο</span>' : ''}</div>
+          <div class="catalog-item-meta" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">${bcList}</div>
+        </div>
+        <button class="btn" style="font-size:11px;padding:4px 10px;color:#c0392b;flex-shrink:0" onclick="deleteCatalogSku('${sku}')">✕ Διαγραφή</button>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('manage-catalog-modal').className = 'modal-bg open';
+  updateCatalogExtraCount();
+}
+
+function deleteCatalogSku(sku) {
+  if (!confirm('Διαγραφή όλων των barcodes για SKU "' + sku + '";')) return;
+  // Remove all barcodes of this SKU from C (only non-base)
+  Object.keys(C).forEach(k => { if (!BASE_C[k] && C[k].sku === sku) delete C[k]; });
+  // Also remove from scanned data
+  if (data[sku]) delete data[sku];
+  saveAll(); render();
+  openManageCatalog();
+  updateCatalogExtraCount();
+  showToast('SKU "' + sku + '" διαγράφηκε από τον κατάλογο');
+}
+
+function clearAllCatalogExtra() {
+  const count = Object.keys(getCatalogExtra()).length;
+  if (!count) { showToast('Δεν υπάρχουν extra barcodes', true); return; }
+  if (!confirm('Διαγραφή ΟΛΩΝ των barcodes που προστέθηκαν από Excel (' + count + ' barcodes);')) return;
+  Object.keys(C).forEach(k => { if (!BASE_C[k]) delete C[k]; });
+  // Remove from scanned data anything that was "isNew"
+  Object.keys(data).forEach(sku => { if (data[sku].isNew) delete data[sku]; });
+  saveAll(); render();
+  openManageCatalog();
+  updateCatalogExtraCount();
+  showToast('Όλα τα Excel barcodes διαγράφηκαν');
+}
+
+// Update count on load
+setTimeout(updateCatalogExtraCount, 200);
+
+function updatePhotoStoreCount() {
+  Promise.all([idbGetAllPhotos(), idbGetAllPending()]).then(([photos, pending]) => {
+    const matched = Object.keys(photos).length;
+    const pend = pending.length;
+    const el = document.getElementById('photo-store-count');
+    if (el) el.textContent = matched + (pend ? ' +' + pend + '⏳' : '');
+  }).catch(() => {});
+}
+
+function openManagePhotos() {
+  Promise.all([idbGetAllPhotos(), idbGetAllPending()]).then(([photos, pending]) => {
+    const skus = Object.keys(photos);
+    const el = document.getElementById('manage-photos-body');
+    let html = '';
+    if (skus.length) {
+      const grid = skus.map(sku =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #eee">
+          <img src="${photos[sku]}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:0.5px solid #ddd;flex-shrink:0">
+          <span style="flex:1;font-weight:500;font-size:12px;color:#1a1a1a">${sku}</span>
+          <button class="btn" style="font-size:11px;padding:4px 10px;color:#c0392b" onclick="deleteOnePhoto('${sku}')">✕</button>
+        </div>`
+      ).join('');
+      html += `<div style="font-size:11px;font-weight:600;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">✅ Αντιστοιχισμένες (${skus.length})</div><div style="max-height:220px;overflow-y:auto;margin-bottom:12px">${grid}</div>`;
+    }
+    if (pending.length) {
+      const pgrid = pending.map(p =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #eee">
+          <img src="${p.dataUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:0.5px dashed #fdba74;flex-shrink:0">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:500;color:#c2410c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.originalName}</div>
+            <div style="font-size:10px;color:#888">Αναμένει σκανάρισμα SKU</div>
+          </div>
+          <button class="btn" style="font-size:11px;padding:4px 10px;color:#c0392b" onclick="deletePendingPhoto('${p.nameNorm}')">✕</button>
+        </div>`
+      ).join('');
+      html += `<div style="font-size:11px;font-weight:600;color:#c2410c;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">⏳ Εκκρεμείς (${pending.length})</div><div style="max-height:200px;overflow-y:auto">${pgrid}</div>`;
+    }
+    if (!skus.length && !pending.length) {
+      html = '<div style="text-align:center;padding:1rem;color:#888">Δεν υπάρχουν αποθηκευμένες φωτογραφίες.</div>';
+    }
+    el.innerHTML = html;
+    document.getElementById('manage-photos-modal').className = 'modal-bg open';
+    updatePhotoStoreCount();
+  }).catch(() => showToast('Σφάλμα ανάγνωσης αποθήκης', true));
+}
+
+function deletePendingPhoto(nameNorm) {
+  idbDeletePending(nameNorm).then(() => openManagePhotos()).catch(() => {});
+}
+
+function deleteOnePhoto(sku) {
+  idbDeletePhoto(sku).then(() => {
+    if (data[sku]) { delete data[sku].photo; render(); }
+    openManagePhotos();
+    showToast('Φωτογραφία ' + sku + ' διαγράφηκε');
+  }).catch(() => showToast('Σφάλμα διαγραφής', true));
+}
+
+function clearAllPhotos() {
+  if (!confirm('Διαγραφή ΟΛΩΝ των αποθηκευμένων φωτογραφιών;')) return;
+  openIDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  })).then(() => {
+    Object.keys(data).forEach(sku => { if (data[sku]) delete data[sku].photo; });
+    render();
+    closeModal('manage-photos-modal');
+    updatePhotoStoreCount();
+    showToast('Όλες οι φωτογραφίες διαγράφηκαν');
+  }).catch(() => showToast('Σφάλμα διαγραφής', true));
+}
+
+// Update count on load
+setTimeout(updatePhotoStoreCount, 500);
+
+function openLightbox(sku) {
+  const photo = data[sku] && data[sku].photo;
+  if (!photo) return;
+  document.getElementById('lightbox-img').src = photo;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+function copySku(sku) {
+  navigator.clipboard.writeText(sku).then(() => {
+    showToast('✓ Αντιγράφηκε: ' + sku);
+  }).catch(() => {
+    // Fallback for older browsers
+    const el = document.createElement('textarea');
+    el.value = sku;
+    el.style.position = 'fixed';
+    el.style.opacity = '0';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('✓ Αντιγράφηκε: ' + sku);
+  });
+}
+</script>
+</body>
+</html>
